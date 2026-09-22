@@ -21,13 +21,15 @@ The application rejects missing or short Maintainer credentials, short Developer
 
 ### Database initialization
 
-On first startup, pad-mcp creates the SQLite database directly with the current schema: patterns, revisions and the FTS5 search index. The initial schema version is 1. No legacy schema or migration is included, and no binary database file is shipped with the project. Subsequent starts reopen the same database without resetting its content.
+On first startup, pad-mcp creates the SQLite database with patterns, revisions and the FTS5 search index. Subsequent starts reopen the same database without resetting its content.
 
 The image includes `knowledge/seed.json`. On an empty, uninitialized database, startup validates and publishes that package in one transaction before accepting connections. Deploy only content you approve for the team in this file. A database completion marker makes this a one-time operation, including for empty seeds; later restarts never restore deleted entries or overwrite team edits. Existing nonempty collections are marked initialized and preserved without loading seeds. Invalid seeds on a fresh database prevent startup and can be corrected before retrying.
 
 To distribute an edited JSON export as the starting collection for a new installation, replace `knowledge/seed.json` before building the image. This does not update an existing database; use the Maintainer tools for ongoing changes. JSON export is not a full database backup.
 
 The database is stored on the `knowledge_data` volume at `/app/data/knowledge.sqlite`. Keep that volume attached across redeployments.
+
+### Request boundary
 
 Unknown Host headers and Origins different from `PUBLIC_URL` are rejected. Non-browser MCP clients can omit Origin. Update `PUBLIC_URL` when changing the domain. Do not enable broad CORS to bypass these checks.
 
@@ -67,5 +69,4 @@ Permanent deletion removes a pattern and all its revisions from the live applica
 - Atomic imports of at most 20 entries per tool call. Larger CLI imports use multiple transactions; failure in a later batch leaves earlier batches imported and reports progress.
 - Paginated exports: avoid publication or deletion while exporting a large collection to obtain a consistent result.
 - Static Bearer authentication without automatic OAuth discovery or login.
-- Test status records the author's PAD version and evidence; the server does not execute flows.
-- Recipe dependencies are text, so deletion does not automatically repair references to removed IDs.
+- The server does not execute PAD flows or track a test status.

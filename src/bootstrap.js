@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { packageEntrySchema } from './schema.js';
 
 const seedSchema = z.object({
-  schema_version: z.literal(1),
+  schema_version: z.literal(2),
   entries: z.array(packageEntrySchema).max(10000)
 }).strict();
 

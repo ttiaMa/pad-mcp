@@ -13,7 +13,7 @@ The server asks the agent to load context first and retrieve relevant patterns b
 | Tool | Role | Purpose |
 | --- | --- | --- |
 | `get_development_context` | Both | Base guidance and up to 20 published conventions in area `global` |
-| `search_patterns` | Both | Retrieve approved patterns with compatibility filters |
+| `search_patterns` | Both | Retrieve approved patterns with area, kind and Power Fx filters |
 | `get_pattern` | Both | Read an entry by ID, with an optional revision |
 | `export_knowledge` | Both | Export all published entries |
 | `list_patterns` | Maintainer | List IDs and current revisions, including drafts |
@@ -32,7 +32,7 @@ Ask the agent to save pasted Robin as a draft, preserving it exactly. `save_draf
 
 After reviewing the draft, approve an exact revision for publication. Saving a newer draft does not replace the previously published revision until publication succeeds.
 
-If your initial message already approves the exact submitted content, the agent can save and publish sequentially. It must not silently change the code or extend that approval to invented metadata. Keep inferred, unconfirmed information in `unconfirmed_notes`.
+If your initial message already approves the exact submitted content, the agent can save and publish sequentially. It must not silently change the code or extend that approval to invented metadata. Omit unsupported inferences; ask for clarification only when needed to identify or use the pattern correctly.
 
 ### Authoring from informal context
 
@@ -46,11 +46,11 @@ The agent should extract:
 | `problem` | When the pattern applies and the expected result, ideally 1-3 sentences |
 | `approach` | The mechanism and the author's stated rationale |
 | `area`, `tags` | A focused topic and about 3-8 relevant terms or synonyms |
-| `inputs`, `outputs`, `dependencies` | Datatypes, prerequisites and required configuration |
-| `pitfalls`, `compatibility` | Known edge cases, limitations and configuration constraints |
-| `unconfirmed_notes` | Uncertain interpretations and missing facts that need review |
+| `inputs`, `outputs` | Input and output values and datatypes |
+| `power_fx` | Whether the flow requires Power Fx enabled or disabled |
+| `pitfalls` | Known edge cases and limitations |
 
-These length targets are editorial guidance, not automatic truncation. Repetition and unrelated narrative can be omitted; details that affect correct use must be retained. Metadata defaults to English, while Robin stays byte-for-byte as submitted and relevant search synonyms can include the team's Italian vocabulary. The agent should check for similar entries and must not invent test evidence or reasons for your implementation choices.
+These length targets are editorial guidance, not automatic truncation. Repetition and unrelated narrative can be omitted; details that affect correct use must be retained once in the appropriate field. Metadata defaults to English, while Robin stays byte-for-byte as submitted and relevant search synonyms can include the team's Italian vocabulary. The agent should check for similar entries and must not invent facts or reasons for your implementation choices.
 
 For example, a long explanation about processing an Excel-derived list in groups could become:
 
@@ -85,12 +85,12 @@ Editable development conventions are entries with `kind=convention` and `area=gl
 `id` is a stable slug such as `list-batches`. `content` requires `title`, `problem` and, for snippets, `robin_code`. Optional fields:
 
 - `kind`: `snippet`, `convention` or `recipe`.
-- `approach`, `area`, `tags`, `inputs`, `outputs`, `dependencies`, `pitfalls`.
+- `approach`, `area`, `tags`, `inputs`, `outputs`, `pitfalls`.
 - `power_fx`: `enabled`, `disabled`, `either` or `unspecified`. A mode filter excludes unspecified entries.
-- `compatibility`, `provenance`, `license`, `unconfirmed_notes`.
-- `verification`: `status` (`unverified`, `user_reported` or `tested`), `pad_version` and `evidence`. A tested entry requires a version and nonblank evidence, as reported by the author; the server does not run PAD tests.
 
-Recipes can mention pattern IDs in `dependencies`. Use task-oriented descriptions and tags for retrieval. Search is lexical with a small English/Italian synonym dictionary; matches still need review for suitability.
+Only these development fields are accepted. Search runs on the server across the complete stored content and returns the matching patterns, including exact Robin code. The collection targets one shared PAD environment; only snippets suitable for that environment should be published. Power Fx mode belongs in `power_fx`. Publication approval and revision history remain separate from content.
+
+Use task-oriented descriptions and tags for retrieval. Search is lexical with a small English/Italian synonym dictionary; matches still need review for suitability.
 
 ## Import and export files
 
@@ -107,7 +107,7 @@ Export refuses to overwrite an existing file. Import validates the entire file f
 
 Export includes all currently published patterns, but no drafts or revision history. You can edit `content` by hand while preserving each entry's stable `id` and the package structure.
 
-- **New installation:** replace `knowledge/seed.json` with the edited export before building/deploying. The first startup on an empty, uninitialized database validates and publishes the entire package atomically, starting local revisions at 1. Including content in this file authorizes publication to the team; it does not change its PAD verification status.
+- **New installation:** replace `knowledge/seed.json` with the edited export before building/deploying. The first startup on an empty, uninitialized database validates and publishes the entire package atomically, starting local revisions at 1. Including content in this file authorizes publication to the team; the server does not execute PAD flows.
 - **Running installation, new IDs:** import the file through the transfer command or `import_knowledge`, then review and publish the resulting drafts.
 - **Running installation, existing IDs:** give the edited file to a Maintainer agent. Ask it to read each current entry, compare the changes and use `save_draft` with the current `expected_revision`, then publish after approval. For already approved replacements, use `replace_pattern`. The generic import command deliberately rejects existing IDs; it does not overwrite them.
 
@@ -119,13 +119,13 @@ The seed is loaded once per database, not on every restart. Editing it later doe
 
 The server never writes database changes back into the repository JSON automatically; run export when you want a fresh copy. Keep the persistent database volume for normal redeployments.
 
-The JSON package format uses `schema_version: 1`. Exports include all currently published entries; imports create drafts requiring review before publication.
+The JSON package format uses `schema_version: 2`. Exports include all currently published entries; imports create drafts requiring review before publication. The server validates the package version and rejects unknown fields.
 
 ### Package format
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "entries": [
     {
       "id": "example-convention",

@@ -24,7 +24,7 @@ async function call(name, args) {
 try {
   // Validate the full input before initiating any writes.
   const pack = operation === 'import' ? z.object({
-    schema_version: z.literal(1), entries: z.array(packageEntrySchema).max(10000)
+    schema_version: z.literal(2), entries: z.array(packageEntrySchema).max(10000)
   }).strict().parse(JSON.parse(await readFile(file, 'utf8'))) : null;
   if (pack && new Set(pack.entries.map(entry => entry.id)).size !== pack.entries.length) throw new Error('Duplicate IDs in package.');
   await client.connect(transport);
@@ -36,11 +36,11 @@ try {
       entries.push(...page.entries);
       offset = page.next_offset;
     } while (offset !== null);
-    await writeFile(file, `${JSON.stringify({ schema_version: 1, entries }, null, 2)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    await writeFile(file, `${JSON.stringify({ schema_version: 2, entries }, null, 2)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
     console.log(`Exported ${entries.length} published entries to ${file}.`);
   } else {
     for (let index = 0; index < pack.entries.length; index += 20) {
-      await call('import_knowledge', { package: { schema_version: 1, entries: pack.entries.slice(index, index + 20) } });
+      await call('import_knowledge', { package: { schema_version: 2, entries: pack.entries.slice(index, index + 20) } });
       console.log(`Imported ${Math.min(index + 20, pack.entries.length)}/${pack.entries.length} as drafts.`);
     }
   }

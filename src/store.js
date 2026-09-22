@@ -30,12 +30,12 @@ export class KnowledgeStore {
   constructor(path) {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
-    this.db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (version > 1) {
+    if (version !== 0 && version !== 2) {
       this.db.close();
-      throw new Error('Database schema is newer than this application.');
+      throw new Error(`Unsupported database schema ${version}; expected 2.`);
     }
+    this.db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
     if (version === 0) this.db.exec(`
       BEGIN;
       CREATE TABLE patterns (
@@ -54,7 +54,7 @@ export class KnowledgeStore {
       CREATE VIRTUAL TABLE knowledge_fts USING fts5(
         id UNINDEXED, title, problem, tags, body, tokenize = 'unicode61 remove_diacritics 2'
       );
-      PRAGMA user_version = 1;
+      PRAGMA user_version = 2;
       COMMIT;
     `);
   }
@@ -185,7 +185,7 @@ export class KnowledgeStore {
       ORDER BY bm25(knowledge_fts, 0, 8, 5, 6, 1), p.id LIMIT ?`)
       .all(expression, area ?? null, area ?? null, kind ?? null, kind ?? null, power_fx ?? null, power_fx ?? null, max_results);
     return { results: rows.map(row => this.decode(row, role)),
-      message: rows.length ? 'Keyword matches; check task fit and compatibility. Approval applies to the original revision only.' : 'No approved pattern found. Do not claim generated code is approved.' };
+      message: rows.length ? 'Keyword matches; check task fit. Approval applies to the original revision only.' : 'No approved pattern found. Do not claim generated code is approved.' };
   }
 
   context(role) {
@@ -200,7 +200,7 @@ export class KnowledgeStore {
     const rows = this.db.prepare(`SELECT p.id, r.revision, r.content FROM patterns p JOIN revisions r
       ON r.id = p.id AND r.revision = p.published_revision
       ORDER BY p.id LIMIT ? OFFSET ?`).all(limit + 1, offset);
-    return { schema_version: 1, entries: rows.slice(0, limit).map(row => ({ ...row, content: JSON.parse(row.content) })),
+    return { schema_version: 2, entries: rows.slice(0, limit).map(row => ({ ...row, content: JSON.parse(row.content) })),
       next_offset: rows.length > limit ? offset + limit : null };
   }
 

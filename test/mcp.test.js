@@ -13,6 +13,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { KnowledgeStore } from '../src/store.js';
 import { createApp, validateConfig } from '../src/server.js';
 import { contentSchema } from '../src/schema.js';
+import { DatabaseSync } from 'node:sqlite';
 
 const config = { maintainerToken: 'a'.repeat(48), developerToken: 'b'.repeat(48), publicUrl: 'http://localhost:8080' };
 const code = "\r\nSET Example TO $fx'=1'\r\n  # Unicode preservation fixture: café ☕\r\n";
@@ -113,13 +114,13 @@ test('portable export roundtrip imports drafts and rolls back an entire conflict
   await publish(maintainer, 'original');
   const exported = await call(maintainer, 'export_knowledge');
   const importedEntry = { ...exported.entries[0], id: 'imported' };
-  await call(maintainer, 'import_knowledge', { package: { schema_version: 1, entries: [importedEntry] } });
+  await call(maintainer, 'import_knowledge', { package: { schema_version: 2, entries: [importedEntry] } });
   const imported = await call(maintainer, 'get_pattern', { id: 'imported' });
   assert.equal('visibility' in imported, false);
   assert.equal(imported.published, false);
   assert.deepEqual(imported.content, exported.entries[0].content);
   const failed = await maintainer.callTool({ name: 'import_knowledge', arguments: {
-    package: { schema_version: 1, entries: [{ ...importedEntry, id: 'rollback' }, importedEntry] }
+    package: { schema_version: 2, entries: [{ ...importedEntry, id: 'rollback' }, importedEntry] }
   } });
   assert.equal(failed.isError, true);
   assert.throws(() => store.get('rollback', 'maintainer'), /not found/);
@@ -156,11 +157,10 @@ test('HTTP boundary rejects unauthenticated, invalid-origin, malformed and overs
   assert.equal((await fetch(`${url}/mcp`, { headers })).status, 405);
 });
 
-test('schema validation does not let malformed snippets or fabricated test completeness enter storage', async t => {
+test('schema validation rejects malformed snippets and unknown fields', async t => {
   const { maintainer } = await setup(t);
   for (const invalid of [
     { ...content(), robin_code: '' },
-    { ...content(), verification: { status: 'tested', pad_version: '', evidence: '' } },
     { ...content(), unexpected_field: true }
   ]) {
     const response = await maintainer.callTool({ name: 'save_draft', arguments: { id: 'invalid', expected_revision: 0, content: invalid } });
@@ -169,15 +169,65 @@ test('schema validation does not let malformed snippets or fabricated test compl
   assert.equal((await call(maintainer, 'list_patterns')).entries.length, 0);
 });
 
+test('development content stays lean through MCP schemas, storage, retrieval and export', async t => {
+  const { maintainer, developer, store } = await setup(t);
+  const original = content({ kind: 'convention', area: 'global', pitfalls: ['limitationuniqueterm'] });
+  const tools = (await maintainer.listTools()).tools;
+  for (const name of ['save_draft', 'replace_pattern']) {
+    const properties = tools.find(tool => tool.name === name).inputSchema.properties.content.properties;
+    assert.deepEqual(Object.keys(properties).sort(), Object.keys(original).sort(), name);
+  }
+  await call(maintainer, 'save_draft', { id: 'lean', expected_revision: 0, content: original });
+  await publish(maintainer, 'lean');
+  const stored = JSON.parse(store.db.prepare('SELECT content FROM revisions WHERE id = ?').get('lean').content);
+  assert.deepEqual(stored, original);
+  for (const client of [maintainer, developer]) {
+    assert.deepEqual((await call(client, 'get_pattern', { id: 'lean' })).content, original);
+    // Full content remains searchable server-side, including limitations.
+    const response = await client.callTool({ name: 'search_patterns', arguments: { query: 'limitationuniqueterm' } });
+    assert.deepEqual(response.structuredContent.results[0].content, original);
+    assert.deepEqual(JSON.parse(response.content[0].text), response.structuredContent);
+    assert.deepEqual((await call(client, 'get_development_context')).conventions[0].content, original);
+    const exported = await call(client, 'export_knowledge');
+    assert.equal(exported.schema_version, 2);
+    assert.deepEqual(exported.entries[0].content, original);
+  }
+  const entry = { id: 'invalid-import', revision: 1, content: original };
+  const invalidPackages = [
+    { schema_version: 1, entries: [entry] },
+    { schema_version: 2, entries: [{ ...entry, content: { ...original, unexpected_field: true } }] }
+  ];
+  for (const pack of invalidPackages) {
+    const response = await maintainer.callTool({ name: 'import_knowledge', arguments: { package: pack } });
+    assert.equal(response.isError, true);
+  }
+  assert.equal(store.list({}).entries.length, 1);
+});
+
+test('unsupported database formats are rejected without changing the file', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'pad-mcp-format-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  for (const version of [1, 3]) {
+    const file = join(dir, `version-${version}.sqlite`);
+    const db = new DatabaseSync(file);
+    db.exec(`CREATE TABLE sample_content (content TEXT); PRAGMA user_version = ${version};`);
+    db.prepare('INSERT INTO sample_content VALUES (?)').run('Preserve existing data');
+    db.close();
+    const before = readFileSync(file);
+    assert.throws(() => new KnowledgeStore(file), /Unsupported database schema/);
+    assert.deepEqual(readFileSync(file), before);
+  }
+});
+
 test('SQLite re-open preserves drafts, original bytes, approved revision and full-text index', () => {
   const dir = mkdtempSync(join(tmpdir(), 'pad-mcp-test-'));
   let store;
   try {
     const file = join(dir, 'knowledge.sqlite');
     store = new KnowledgeStore(file);
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 1);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 2);
     assert.deepEqual(store.db.prepare('PRAGMA table_info(patterns)').all().map(column => column.name), ['id', 'latest_revision', 'published_revision']);
-    assert.deepEqual(store.export({}), { schema_version: 1, entries: [], next_offset: null });
+    assert.deepEqual(store.export({}), { schema_version: 2, entries: [], next_offset: null });
     store.saveDraft({ id: 'persisted', expected_revision: 0, content: content() });
     store.publish({ id: 'persisted', revision: 1 });
     store.saveDraft({ id: 'persisted', expected_revision: 1, content: content({ robin_code: 'draft' }) });
@@ -234,7 +284,7 @@ test('Developers cannot invoke any Maintainer mutation, including replacement an
     unpublish_pattern: { id: 'protected' },
     replace_pattern: { id: 'protected', expected_revision: 1, content: content() },
     delete_pattern: { id: 'protected', expected_revision: 1 },
-    import_knowledge: { package: { schema_version: 1, entries: [{ ...published, id: 'unauthorized' }] } }
+    import_knowledge: { package: { schema_version: 2, entries: [{ ...published, id: 'unauthorized' }] } }
   };
   const developerTools = (await developer.listTools()).tools.map(tool => tool.name);
   for (const [name, args] of Object.entries(mutations)) {

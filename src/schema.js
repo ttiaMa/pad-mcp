@@ -16,23 +16,10 @@ export const contentSchema = z.object({
   power_fx: z.enum(['enabled', 'disabled', 'either', 'unspecified']).default('unspecified'),
   inputs: notes.describe('Required input values and datatypes supported by the supplied explanation or code.'),
   outputs: notes.describe('Produced values and datatypes; preserve important edge-case behavior.'),
-  dependencies: notes.describe('Required subflows, instances, UI elements or configuration steps.'),
-  pitfalls: notes.describe('Known limitations and edge cases stated by the author. Keep uncertain concerns in unconfirmed_notes.'),
-  compatibility: shortText.default('').describe('Known PAD version or configuration constraints. Leave empty when unknown.'),
-  provenance: shortText.default(''),
-  license: z.string().max(200).default(''),
-  unconfirmed_notes: notes.describe('Tentative interpretations and unresolved questions, explicitly unconfirmed. Do not duplicate these as established facts elsewhere.'),
-  verification: z.object({
-    status: z.enum(['unverified', 'user_reported', 'tested']).default('unverified'),
-    pad_version: z.string().max(100).default(''),
-    evidence: shortText.default('')
-  }).strict().default({})
+  pitfalls: notes.describe('Known limitations and edge cases stated by the author. Do not add speculative concerns.')
 }).strict().superRefine((value, ctx) => {
   if (value.kind === 'snippet' && !value.robin_code.trim()) {
     ctx.addIssue({ code: 'custom', path: ['robin_code'], message: 'A snippet requires Robin code.' });
-  }
-  if (value.verification.status === 'tested' && (!value.verification.pad_version.trim() || !value.verification.evidence.trim())) {
-    ctx.addIssue({ code: 'custom', path: ['verification'], message: 'Tested requires a PAD version and test evidence.' });
   }
 });
 
@@ -49,7 +36,7 @@ export const packageEntrySchema = z.object({
 }).strict();
 
 export const importSchema = z.object({
-  schema_version: z.literal(1),
+  schema_version: z.literal(2),
   entries: z.array(packageEntrySchema).min(1).max(20)
 }).strict();
 
