@@ -1,0 +1,29 @@
+services:
+  pad-mcp:
+    build: .
+    restart: unless-stopped
+    init: true
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      DATABASE_PATH: /app/data/knowledge.sqlite
+      PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL to your HTTPS origin}
+      MCP_MAINTAINER_TOKEN: ${MCP_MAINTAINER_TOKEN:?Set a random maintainer token of at least 32 characters}
+      MCP_DEVELOPER_TOKEN: ${MCP_DEVELOPER_TOKEN:-}
+    expose:
+      - "8080"
+    volumes:
+      - knowledge_data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  knowledge_data:

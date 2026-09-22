@@ -1,0 +1,145 @@
+# Usage
+
+## Connect an agent
+
+Use `https://mcp.example.com/mcp` with `Authorization: Bearer <token>`. Choose the Developer token for development assistance and the Maintainer token for maintaining the collection.
+
+Follow the [Codex and Claude Code setup instructions](../README.md#connect-codex-or-claude-code) for client configuration, environment variables and connection checks. Both clients use `PAD_MCP_TOKEN`; its value determines the role. The project's `.env` configures the server and transfer script, not the agent's environment.
+
+The server asks the agent to load context first and retrieve relevant patterns before implementation. Actual tool use depends on the agent and client. For RPA migration, the agent interprets the source logic and searches for the PAD implementation needs individually, such as batching, retries or Excel handling. Validate the resulting flow in PAD.
+
+## Tools and roles
+
+| Tool | Role | Purpose |
+| --- | --- | --- |
+| `get_development_context` | Both | Base guidance and up to 20 published conventions in area `global` |
+| `search_patterns` | Both | Retrieve approved patterns with compatibility filters |
+| `get_pattern` | Both | Read an entry by ID, with an optional revision |
+| `export_knowledge` | Both | Export all published entries |
+| `list_patterns` | Maintainer | List IDs and current revisions, including drafts |
+| `save_draft` | Maintainer | Save a new immutable draft revision |
+| `publish_revision` | Maintainer | Publish the exact latest revision for the team |
+| `replace_pattern` | Maintainer | Save and publish approved replacement content atomically under the same ID |
+| `unpublish_pattern` | Maintainer | Withdraw from retrieval while preserving history |
+| `delete_pattern` | Maintainer | Permanently remove an entry and all its revisions from the live database |
+| `import_knowledge` | Maintainer | Import up to 20 entries as drafts |
+
+Both roles use the same published collection. Developers retrieve current published revisions; Maintainers can also inspect drafts and history for review. Developers cannot call mutation tools even by name. All access requires authentication.
+
+## Add and approve
+
+Ask the agent to save pasted Robin as a draft, preserving it exactly. `save_draft` takes an `id`, `expected_revision` and `content`. Use revision 0 for a new ID; otherwise read the latest revision first.
+
+After reviewing the draft, approve an exact revision for publication. Saving a newer draft does not replace the previously published revision until publication succeeds.
+
+If your initial message already approves the exact submitted content, the agent can save and publish sequentially. It must not silently change the code or extend that approval to invented metadata. Keep inferred, unconfirmed information in `unconfirmed_notes`.
+
+### Authoring from informal context
+
+Supply the original Robin block and explain its purpose naturally. If your client supports voice input, its transcript can be used as the explanation. The connected agent prepares the entry using `authoring_guidance` returned to Maintainers by `get_development_context`; the same guidance is included in the Maintainer's MCP server instructions and reinforced in the tool's field descriptions.
+
+The agent should extract:
+
+| Field | What to retain |
+| --- | --- |
+| `title` | The specific operation, expressed in likely search terms |
+| `problem` | When the pattern applies and the expected result, ideally 1-3 sentences |
+| `approach` | The mechanism and the author's stated rationale |
+| `area`, `tags` | A focused topic and about 3-8 relevant terms or synonyms |
+| `inputs`, `outputs`, `dependencies` | Datatypes, prerequisites and required configuration |
+| `pitfalls`, `compatibility` | Known edge cases, limitations and configuration constraints |
+| `unconfirmed_notes` | Uncertain interpretations and missing facts that need review |
+
+These length targets are editorial guidance, not automatic truncation. Repetition and unrelated narrative can be omitted; details that affect correct use must be retained. Metadata defaults to English, while Robin stays byte-for-byte as submitted and relevant search synonyms can include the team's Italian vocabulary. The agent should check for similar entries and must not invent test evidence or reasons for your implementation choices.
+
+For example, a long explanation about processing an Excel-derived list in groups could become:
+
+- **Title:** Split a list into fixed-size batches
+- **Problem:** Process a list in groups of up to N items, including the final incomplete group.
+- **Tags:** batching, pagination, list, groups
+
+That summary is appropriate only if the supplied explanation and code support it. Before publication, the agent shows the saved ID/revision and a compact summary of metadata, constraints and open questions. Approval of the original code alone does not approve newly inferred metadata.
+
+The server validates structure and field sizes, stores the supplied fields and indexes published content. It does not transcribe audio, call an AI model or assess whether the summary accurately reflects your explanation. The quality of the draft depends on the connected agent and your review.
+
+## Replace, withdraw or delete
+
+Choose the operation that matches the request:
+
+- **Replace an outdated implementation:** read the latest revision, then call `replace_pattern` with the same ID, that `expected_revision`, the complete approved replacement `content`. Creation, approval and search-index update occur in one transaction. Previous revisions remain available to Maintainers. If any step fails, the previous published state remains intact. Unapproved replacements should be saved as drafts instead.
+- **Withdraw an entry:** call `unpublish_pattern`. It disappears from search, shared context, exports and Developer access. Maintainers retain the history and can publish it again.
+- **Permanently delete an entry:** explicitly request deletion, then call `delete_pattern` with its exact ID and latest `expected_revision`. All revisions and the search-index entry are removed from the live database. This cannot be undone through MCP; recovery requires a backup. Existing backups and previously exported copies are not erased.
+
+Replacement reuses the ID so references keep pointing to the maintained pattern. Permanent deletion can leave IDs mentioned in recipes unresolved; dependency text is not a managed foreign-key graph in this release.
+
+A revision conflict rejects the operation. Read the current state before retrying, including when a network failure leaves the outcome unknown. Replacement does not create a new identity or merge entries with different IDs.
+
+## Initial context
+
+Fixed server instructions and base guidance are in `src/server.js`. Changing them requires a process restart or redeployment, and reconnecting clients to refresh server instructions.
+
+Editable development conventions are entries with `kind=convention` and `area=global`. Publish them through the same tools as snippets; the next `get_development_context` call reads the updated database content. All published conventions are shared with Developers. Long collections are capped at 20 global conventions per context response.
+
+## Entry fields
+
+`id` is a stable slug such as `list-batches`. `content` requires `title`, `problem` and, for snippets, `robin_code`. Optional fields:
+
+- `kind`: `snippet`, `convention` or `recipe`.
+- `approach`, `area`, `tags`, `inputs`, `outputs`, `dependencies`, `pitfalls`.
+- `power_fx`: `enabled`, `disabled`, `either` or `unspecified`. A mode filter excludes unspecified entries.
+- `compatibility`, `provenance`, `license`, `unconfirmed_notes`.
+- `verification`: `status` (`unverified`, `user_reported` or `tested`), `pad_version` and `evidence`. A tested entry requires a version and nonblank evidence, as reported by the author; the server does not run PAD tests.
+
+Recipes can mention pattern IDs in `dependencies`. Use task-oriented descriptions and tags for retrieval. Search is lexical with a small English/Italian synonym dictionary; matches still need review for suitability.
+
+## Import and export files
+
+The transfer script uses the authenticated MCP endpoint and reads `.env`. For a remote instance, set `MCP_URL=https://mcp.example.com/mcp` and `MCP_MAINTAINER_TOKEN` in the environment.
+
+```sh
+npm run transfer -- export knowledge.json
+npm run transfer -- import knowledge.json
+```
+
+Export refuses to overwrite an existing file. Import validates the entire file first, rejects existing IDs and never inherits publication approval. Imported revision numbers are source metadata; local revisions start at 1. For existing entries, use draft updates or approved replacement.
+
+### Edit an exported collection
+
+Export includes all currently published patterns, but no drafts or revision history. You can edit `content` by hand while preserving each entry's stable `id` and the package structure.
+
+- **New installation:** replace `knowledge/seed.json` with the edited export before building/deploying. The first startup on an empty, uninitialized database validates and publishes the entire package atomically, starting local revisions at 1. Including content in this file authorizes publication to the team; it does not change its PAD verification status.
+- **Running installation, new IDs:** import the file through the transfer command or `import_knowledge`, then review and publish the resulting drafts.
+- **Running installation, existing IDs:** give the edited file to a Maintainer agent. Ask it to read each current entry, compare the changes and use `save_draft` with the current `expected_revision`, then publish after approval. For already approved replacements, use `replace_pattern`. The generic import command deliberately rejects existing IDs; it does not overwrite them.
+
+Example chat request:
+
+> Use pad-mcp. Read this edited JSON collection and compare it with the current patterns. For existing IDs, save the changes as new drafts using their latest revisions; create drafts for new IDs. Preserve the Robin code from the file and show me the changes before publication.
+
+The seed is loaded once per database, not on every restart. Editing it later does not synchronize it with an existing server. A persistent completion marker prevents deleted entries from returning, even if the collection becomes empty. An existing nonempty database is marked initialized without importing or publishing anything. Invalid seeds fail startup without partially importing data; fix the file and restart. An empty seed package is also valid. Seeds support up to 10,000 entries.
+
+The server never writes database changes back into the repository JSON automatically; run export when you want a fresh copy. Keep the persistent database volume for normal redeployments.
+
+The JSON package format uses `schema_version: 1`. Exports include all currently published entries; imports create drafts requiring review before publication.
+
+### Package format
+
+```json
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "example-convention",
+      "revision": 1,
+      "content": {
+        "kind": "convention",
+        "title": "Example for review",
+        "problem": "Define a personal development convention",
+        "approach": "Replace this text with an approved rule.",
+        "area": "global"
+      }
+    }
+  ]
+}
+```
+
+You can attach a file to a chat and ask the agent to import it if the client can read the attachment and pass its structured contents to `import_knowledge`. The server does not access local client paths or download arbitrary URLs. There is no upload web form in this release.

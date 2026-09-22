@@ -1,0 +1,20 @@
+{
+  "name": "pad-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Develop in Power Automate Desktop and migrate RPA code with AI responses shaped by your team's development style",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "dev": "node --env-file-if-exists=.env --watch src/index.js",
+    "test": "node --test",
+    "check": "node --check src/index.js && node --check src/bootstrap.js && node --check src/store.js && node --check src/server.js && node --check src/schema.js && node --check scripts/transfer.js",
+    "transfer": "node --env-file-if-exists=.env scripts/transfer.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "express": "^5.1.0",
+    "zod": "^3.25.76"
+  }
+}

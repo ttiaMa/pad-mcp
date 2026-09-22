@@ -1,0 +1,216 @@
+import { DatabaseSync } from 'node:sqlite';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+
+export class KnowledgeError extends Error {}
+
+// Small bilingual expansion; no model or external embedding service is required.
+const groups = [
+  ['date', 'dates', 'data', 'giorno', 'giorni', 'mese', 'month', 'datetime'],
+  ['lista', 'liste', 'list', 'lists', 'elementi', 'items'],
+  ['paginazione', 'pagination', 'batch', 'gruppi', 'blocchi'],
+  ['errore', 'errori', 'error', 'errors', 'retry', 'tentativi'],
+  ['stringa', 'stringhe', 'string', 'strings', 'testo', 'text'],
+  ['file', 'files', 'cartella', 'folder'],
+  ['coda', 'code', 'queue', 'queues']
+];
+const stopWords = new Set('a al alla alle con da dal dalla dei del della delle di e gli i il in la le lo mi per prendere che come devo voglio un una uno the a an to of for and how do i need'.split(' '));
+
+function matchExpression(query) {
+  const words = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [])]
+    .filter(word => !stopWords.has(word)).slice(0, 32);
+  const expanded = new Set(words);
+  for (const group of groups) if (group.some(word => expanded.has(word))) {
+    for (const word of group) expanded.add(word);
+  }
+  return [...expanded].map(word => `"${word}"`).join(' OR ');
+}
+
+export class KnowledgeStore {
+  constructor(path) {
+    if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
+    this.db = new DatabaseSync(path);
+    this.db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
+    const version = this.db.prepare('PRAGMA user_version').get().user_version;
+    if (version > 1) {
+      this.db.close();
+      throw new Error('Database schema is newer than this application.');
+    }
+    if (version === 0) this.db.exec(`
+      BEGIN;
+      CREATE TABLE patterns (
+        id TEXT PRIMARY KEY,
+        latest_revision INTEGER NOT NULL,
+        published_revision INTEGER
+      );
+      CREATE TABLE revisions (
+        id TEXT NOT NULL REFERENCES patterns(id),
+        revision INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        approved_at TEXT,
+        PRIMARY KEY (id, revision)
+      );
+      CREATE VIRTUAL TABLE knowledge_fts USING fts5(
+        id UNINDEXED, title, problem, tags, body, tokenize = 'unicode61 remove_diacritics 2'
+      );
+      PRAGMA user_version = 1;
+      COMMIT;
+    `);
+  }
+
+  close() { this.db.close(); }
+  health() { this.db.prepare('SELECT 1').get(); }
+
+  transaction(work) {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = work();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  saveDraft({ id, expected_revision, content }) {
+    return this.transaction(() => this.insertDraft(id, expected_revision, content));
+  }
+
+  insertDraft(id, expectedRevision, content) {
+    const current = this.db.prepare('SELECT * FROM patterns WHERE id = ?').get(id);
+    const latest = current?.latest_revision ?? 0;
+    if (latest !== expectedRevision) throw new KnowledgeError(`Revision conflict for ${id}: latest is ${latest}. Read it before retrying.`);
+    const revision = latest + 1;
+    if (!current) this.db.prepare('INSERT INTO patterns (id, latest_revision) VALUES (?, ?)').run(id, revision);
+    else this.db.prepare('UPDATE patterns SET latest_revision = ? WHERE id = ?').run(revision, id);
+    this.db.prepare('INSERT INTO revisions (id, revision, content, created_at) VALUES (?, ?, ?, ?)')
+      .run(id, revision, JSON.stringify(content), new Date().toISOString());
+    return { id, revision, status: 'draft', content };
+  }
+
+  publish({ id, revision }) {
+    return this.transaction(() => this.publishRevision({ id, revision }));
+  }
+
+  // Shared by standalone publication and atomic replacement; caller owns the transaction.
+  publishRevision({ id, revision }) {
+    const pattern = this.db.prepare('SELECT * FROM patterns WHERE id = ?').get(id);
+    if (!pattern || pattern.latest_revision !== revision) throw new KnowledgeError('Only the latest exact revision can be published. Read the pattern first.');
+    const row = this.db.prepare('SELECT * FROM revisions WHERE id = ? AND revision = ?').get(id, revision);
+    const content = JSON.parse(row.content);
+    this.db.prepare('UPDATE revisions SET approved_at = COALESCE(approved_at, ?) WHERE id = ? AND revision = ?')
+      .run(new Date().toISOString(), id, revision);
+    this.db.prepare('UPDATE patterns SET published_revision = ? WHERE id = ?').run(revision, id);
+    this.db.prepare('DELETE FROM knowledge_fts WHERE id = ?').run(id);
+    this.db.prepare('INSERT INTO knowledge_fts (id, title, problem, tags, body) VALUES (?, ?, ?, ?, ?)')
+      .run(id, content.title, content.problem, content.tags.join(' '), JSON.stringify(content));
+    return { id, revision, status: 'published' };
+  }
+
+  replace({ id, expected_revision, content }) {
+    return this.transaction(() => {
+      this.requireRevision(id, expected_revision);
+      const draft = this.insertDraft(id, expected_revision, content);
+      const published = this.publishRevision({ id, revision: draft.revision });
+      return { ...published, replaced_revision: expected_revision, history_preserved: true };
+    });
+  }
+
+  requireRevision(id, expectedRevision) {
+    const pattern = this.db.prepare('SELECT latest_revision FROM patterns WHERE id = ?').get(id);
+    if (!pattern) throw new KnowledgeError('Pattern not found.');
+    if (pattern.latest_revision !== expectedRevision) {
+      throw new KnowledgeError(`Revision conflict for ${id}: latest is ${pattern.latest_revision}. Read it before retrying.`);
+    }
+  }
+
+  delete({ id, expected_revision }) {
+    return this.transaction(() => {
+      this.requireRevision(id, expected_revision);
+      this.db.prepare('DELETE FROM knowledge_fts WHERE id = ?').run(id);
+      const deleted = this.db.prepare('DELETE FROM revisions WHERE id = ?').run(id);
+      this.db.prepare('DELETE FROM patterns WHERE id = ?').run(id);
+      return { id, status: 'deleted', deleted_revisions: Number(deleted.changes), history_preserved: false };
+    });
+  }
+
+  unpublish(id) {
+    return this.transaction(() => {
+      if (!this.db.prepare('SELECT id FROM patterns WHERE id = ?').get(id)) throw new KnowledgeError('Pattern not found.');
+      this.db.prepare('UPDATE patterns SET published_revision = NULL WHERE id = ?').run(id);
+      this.db.prepare('DELETE FROM knowledge_fts WHERE id = ?').run(id);
+      return { id, status: 'unpublished', history_preserved: true };
+    });
+  }
+
+  decode(row, role = 'maintainer') {
+    return { id: row.id, revision: row.revision,
+      ...(role === 'maintainer' ? { latest_revision: row.latest_revision } : {}),
+      published: row.revision === row.published_revision,
+      created_at: row.created_at, approved_at: row.approved_at, content: JSON.parse(row.content) };
+  }
+
+  get(id, role, revision) {
+    const row = this.db.prepare(`SELECT p.*, r.* FROM patterns p JOIN revisions r ON r.id = p.id
+      AND r.revision = ${revision === undefined ? (role === 'maintainer' ? 'p.latest_revision' : 'p.published_revision') : '?'}
+      WHERE p.id = ? ${role === 'maintainer' ? '' : "AND r.revision = p.published_revision"}`)
+      .get(...(revision === undefined ? [id] : [revision, id]));
+    if (!row) throw new KnowledgeError('Pattern not found or inaccessible.');
+    return this.decode(row, role);
+  }
+
+  list({ status = 'all', offset = 0, limit = 20 }) {
+    const rows = this.db.prepare(`SELECT p.*, r.* FROM patterns p JOIN revisions r
+      ON r.id = p.id AND r.revision = p.latest_revision
+      WHERE (? = 'all' OR (? = 'draft' AND (p.published_revision IS NULL OR p.latest_revision != p.published_revision))
+      OR (? = 'published' AND p.published_revision IS NOT NULL)) ORDER BY p.id LIMIT ? OFFSET ?`)
+      .all(status, status, status, limit + 1, offset);
+    return { entries: rows.slice(0, limit).map(row => ({ id: row.id, revision: row.revision,
+      published_revision: row.published_revision, title: JSON.parse(row.content).title })),
+      next_offset: rows.length > limit ? offset + limit : null };
+  }
+
+  search({ query, area, kind, power_fx, max_results = 3 }, role) {
+    const expression = matchExpression(query);
+    if (!expression) return { results: [], message: 'No searchable terms. Use specific task keywords.' };
+    const rows = this.db.prepare(`SELECT p.*, r.* FROM knowledge_fts
+      JOIN patterns p ON p.id = knowledge_fts.id
+      JOIN revisions r ON r.id = p.id AND r.revision = p.published_revision
+      WHERE knowledge_fts MATCH ?
+      AND (? IS NULL OR json_extract(r.content, '$.area') = ?)
+      AND (? IS NULL OR json_extract(r.content, '$.kind') = ?)
+      AND (? IS NULL OR json_extract(r.content, '$.power_fx') IN (?, 'either'))
+      ORDER BY bm25(knowledge_fts, 0, 8, 5, 6, 1), p.id LIMIT ?`)
+      .all(expression, area ?? null, area ?? null, kind ?? null, kind ?? null, power_fx ?? null, power_fx ?? null, max_results);
+    return { results: rows.map(row => this.decode(row, role)),
+      message: rows.length ? 'Keyword matches; check task fit and compatibility. Approval applies to the original revision only.' : 'No approved pattern found. Do not claim generated code is approved.' };
+  }
+
+  context(role) {
+    const rows = this.db.prepare(`SELECT p.*, r.* FROM patterns p JOIN revisions r
+      ON r.id = p.id AND r.revision = p.published_revision
+      WHERE json_extract(r.content, '$.kind') = 'convention' AND json_extract(r.content, '$.area') = 'global'
+      ORDER BY p.id LIMIT 21`).all();
+    return { conventions: rows.slice(0, 20).map(row => this.decode(row, role)), truncated: rows.length > 20 };
+  }
+
+  export({ offset = 0, limit = 20 }) {
+    const rows = this.db.prepare(`SELECT p.id, r.revision, r.content FROM patterns p JOIN revisions r
+      ON r.id = p.id AND r.revision = p.published_revision
+      ORDER BY p.id LIMIT ? OFFSET ?`).all(limit + 1, offset);
+    return { schema_version: 1, entries: rows.slice(0, limit).map(row => ({ ...row, content: JSON.parse(row.content) })),
+      next_offset: rows.length > limit ? offset + limit : null };
+  }
+
+  import(pack) {
+    return this.transaction(() => ({
+      entries: pack.entries.map(entry => {
+        const saved = this.insertDraft(entry.id, 0, entry.content);
+        return { id: saved.id, revision: saved.revision, status: 'draft', source_revision: entry.revision };
+      }),
+      message: 'Imported as drafts. Review before publishing. Existing IDs cause the whole batch to roll back.'
+    }));
+  }
+}

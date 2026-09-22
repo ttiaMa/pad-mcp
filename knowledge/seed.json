@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "id": "power-fx-string-manipulation",
+      "revision": 1,
+      "content": {
+        "kind": "snippet",
+        "title": "Manipulate strings with Power Fx: replace characters",
+        "problem": "Transform text in a Power Automate Desktop flow using Power Fx. The initial example replaces forward slashes with underscores; variable names and replacement characters are samples to adapt to the current flow.",
+        "approach": "Use Substitute in a Robin SET action to produce the transformed text. Sample input: 22/09/2026; expected output: 22_09_2026. Keep this pattern ID when adding further real string manipulation cases, and update the description and tags to reflect the cases actually included.",
+        "robin_code": "SET t_SetDataFileOutput TO $fx'=Substitute(t_DataFileOutput, \"/\", \"_\")'",
+        "area": "strings",
+        "tags": [
+          "power-fx",
+          "strings",
+          "text manipulation",
+          "substitute",
+          "replace characters",
+          "stringhe"
+        ],
+        "power_fx": "enabled",
+        "inputs": [
+          "Source text (Text). Sample variable: t_DataFileOutput, initialized before this action; sample value: 22/09/2026. Map it to the source variable in the actual flow."
+        ],
+        "outputs": [
+          "Transformed text (Text). Sample variable: t_SetDataFileOutput; expected sample value: 22_09_2026. Map it to the destination variable in the actual flow."
+        ],
+        "dependencies": [
+          "Power Fx enabled in the Power Automate Desktop flow."
+        ],
+        "pitfalls": [
+          "This example replaces a character in text; it does not parse or format a date, even when the sample text looks like a date.",
+          "Replacing forward slashes alone is not a complete filename sanitization routine."
+        ],
+        "compatibility": "Power Automate Desktop with Power Fx enabled. No PAD version was supplied.",
+        "provenance": "Robin code preserved from the user's legacy development prompt. Consolidated into one extensible string manipulation snippet at the user's request.",
+        "license": "",
+        "unconfirmed_notes": [],
+        "verification": {
+          "status": "unverified",
+          "pad_version": "",
+          "evidence": ""
+        }
+      }
+    }
+  ]
+}
