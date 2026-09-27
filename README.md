@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/pad-mcp-logo.png" alt="pad-mcp" width="520">
+  <img src="https://raw.githubusercontent.com/ttiaMa/pad-mcp/main/assets/pad-mcp-logo.png" alt="pad-mcp" width="520">
 </p>
 
 **Build Power Automate Desktop flows and migrate RPA code with AI agents that follow your team's development style.**
