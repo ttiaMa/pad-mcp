@@ -22,11 +22,11 @@ const lookup = {
   query: z.string().trim().min(1).max(500).optional(),
   max_results: z.number().int().min(1).max(20).default(5)
 };
-const actionLookup = z.object({
+export const actionLookup = z.object({
   ...lookup, action_id: text.optional(), module: text.optional()
 }).strict().refine(a => a.action_id ? !a.query && !a.module : !!(a.query || a.module),
   'Supply action_id alone, or query and/or module.');
-const typeLookup = z.object({ ...lookup, type_name: text.optional() }).strict()
+export const typeLookup = z.object({ ...lookup, type_name: text.optional() }).strict()
   .refine(a => !!a.type_name !== !!a.query, 'Supply either type_name or query.');
 
 export const CATALOG_REPOSITORY = 'https://github.com/JoeG592/pad-robin-action-kb';
@@ -113,7 +113,9 @@ export class CatalogIndex {
     const source = this.#metadata('actions');
     if (action_id) {
       const record = this.#actions.find(item => item.id === action_id)?.record;
-      return structuredClone({ source, record: record ?? null });
+      return structuredClone({ source, record: record ?? null,
+        reference_rules: { types: this.#pair.types.rules,
+          ...(this.#pair.actions.power_fx ? { power_fx: this.#pair.actions.power_fx } : {}) } });
     }
     const candidates = module ? this.#actions.filter(item => item.record.module.toLowerCase() === module.toLowerCase()) : this.#actions;
     const matches = rank(candidates, query);

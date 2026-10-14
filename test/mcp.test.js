@@ -14,6 +14,7 @@ import { KnowledgeStore } from '../src/store.js';
 import { createApp, validateConfig } from '../src/server.js';
 import { contentSchema } from '../src/schema.js';
 import { DatabaseSync } from 'node:sqlite';
+import { CatalogCache } from '../src/catalog-cache.js';
 
 const config = { maintainerToken: 'a'.repeat(48), developerToken: 'b'.repeat(48), publicUrl: 'http://localhost:8080' };
 const code = "\r\nSET Example TO $fx'=1'\r\n  # Unicode preservation fixture: café ☕\r\n";
@@ -21,9 +22,9 @@ const content = (extra = {}) => contentSchema.parse({ title: 'Pagination example
 const testContexts = new WeakMap();
 const testRoles = new WeakMap();
 
-async function setup(t) {
+async function setup(t, dependencies) {
   const store = new KnowledgeStore(':memory:');
-  const listener = createApp(store, config).listen(0, '127.0.0.1');
+  const listener = createApp(store, config, dependencies).listen(0, '127.0.0.1');
   await once(listener, 'listening');
   const url = `http://127.0.0.1:${listener.address().port}`;
   const clients = [];
@@ -451,4 +452,88 @@ test('publication and replacement require classification and roll back without r
   const imported = { id: 'unclassified-import', revision: 1, content: content({ power_fx: 'unspecified' }) };
   await call(maintainer, 'import_knowledge', { package: { schema_version: 2, entries: [imported] } });
   assert.equal(store.get(imported.id, 'maintainer').published, false);
+});
+
+test('catalog MCP tools use shared persistent cache, selected edition and bounded responses', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'pad-catalog-mcp-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  let requests = 0;
+  let now = Date.parse('2026-10-14T00:00:00Z');
+  let offline = false;
+  const fetch = async url => {
+    requests++;
+    if (offline) throw new Error('Simulated outage');
+    if (url.includes('api.github.com')) return Response.json({ sha: 'a'.repeat(40) });
+    const mode = url.includes('_PowerFx') ? 'enabled' : 'disabled';
+    const base = { name: 'Synthetic', version: '1', license: 'CC BY 4.0',
+      ...(mode === 'enabled' ? { edition: 'power-fx' } : {}) };
+    if (url.includes('TypeReference')) return Response.json({ ...base, rules: [mode + ' rule'], types: [
+      { type: 'String', category: 'value', example: mode + ' text', description: 'Text' }
+    ] });
+    return Response.json({ ...base, pad_build: '2.73',
+      ...(mode === 'enabled' ? { power_fx: { run_time_traps: ['Synthetic runtime caveat'] } } : {}),
+      actions: Array.from({ length: 7 }, (_, i) => ({
+        actionId: `Text.Action${i}`, module: 'Text', kind: 'Action', selector: null,
+        template: 'Synthetic', golden_example: mode + ' example',
+        input_params: [{ name: 'Text', type: 'String' }], output_params: [],
+        constraints: {}, sibling_selectors: [], needs_ui_selector: false, validation: 'Synthetic only'
+      })) });
+  };
+  const catalogCache = new CatalogCache({ directory, fetch, now: () => now });
+  const { developer, maintainer, store } = await setup(t, { catalogCache });
+  assert.equal(requests, 0); // Initial prompt and snippet workflows never require GitHub.
+  const fx = testContexts.get(developer);
+  const classic = (await call(developer, 'get_development_context', { power_fx: 'disabled' })).context_id;
+  const fxPrompt = await call(developer, 'get_development_context', { context_id: fx });
+  assert.match(fxPrompt.development_prompt, /Selected mode: PAD with Power Fx enabled/);
+  assert.doesNotMatch(fxPrompt.development_prompt, /Selected mode: PAD Classic/);
+  assert.match((await call(developer, 'get_development_context', { context_id: classic })).development_prompt, /Selected mode: PAD Classic/);
+  for (const client of [developer, maintainer]) {
+    const tools = (await client.listTools()).tools;
+    for (const name of ['search_actions', 'search_type_reference']) {
+      const tool = tools.find(item => item.name === name);
+      assert.equal(tool.annotations.readOnlyHint, true);
+      assert.equal(tool.annotations.openWorldHint, true);
+    }
+  }
+  for (const [name, args] of [
+    ['search_actions', { query: 'text' }],
+    ['search_actions', { context_id: fx }],
+    ['search_actions', { context_id: fx, action_id: 'Text.Action0', query: 'text' }],
+    ['search_type_reference', { context_id: fx, type_name: 'String', query: 'text' }],
+    ['search_actions', { context_id: '00000000-0000-4000-8000-000000000000', query: 'text' }]
+  ]) assert.equal((await developer.callTool({ name, arguments: args })).isError, true);
+  assert.equal(requests, 0);
+  const summaries = await Promise.all([developer, maintainer].map(client =>
+    call(client, 'search_actions', { context_id: fx, module: 'Text' })));
+  assert.equal(requests, 3);
+  assert.equal(summaries[0].results.length, 5);
+  assert.equal(summaries[0].truncated, true);
+  assert.equal('golden_example' in summaries[0].results[0], false);
+  for (const [id, mode] of [[fx, 'enabled'], [classic, 'disabled']]) {
+    const exact = await call(developer, 'search_actions', { context_id: id, action_id: 'Text.Action0' });
+    assert.equal(exact.record.golden_example, mode + ' example');
+    assert.equal(exact.source.power_fx, mode);
+    assert.equal('development_prompt' in exact, false);
+    assert.equal('power_fx' in exact.reference_rules, mode === 'enabled');
+    const type = await call(developer, 'search_type_reference', { context_id: id, type_name: 'String' });
+    assert.equal(type.record.example, mode + ' text');
+  }
+  offline = true; now += 3600000;
+  const stale = await call(developer, 'search_actions', { context_id: fx, action_id: 'Text.Action0' });
+  assert.equal(stale.source.cache_status, 'stale');
+  assert.ok(stale.source.refresh_error);
+  assert.equal(store.export({}).entries.length, 0); // Catalog never becomes approved knowledge.
+  const restarted = new CatalogCache({ directory, fetch, now: () => now });
+  assert.equal((await restarted.get('enabled')).searchTypes({ type_name: 'String' }).record.example, 'enabled text');
+});
+
+test('catalog failure is a tool error and leaves context and approved patterns usable', async t => {
+  const { developer, maintainer } = await setup(t, { catalogCache: { get: async () => { throw new Error('Unavailable'); } } });
+  const result = await developer.callTool({ name: 'search_actions', arguments: { context_id: testContexts.get(developer), query: 'text' } });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /Catalog unavailable/);
+  await save(maintainer, 'available'); await publish(maintainer, 'available');
+  assert.equal((await call(developer, 'search_patterns', { query: 'pagination' })).results.length, 1);
+  assert.equal((await call(developer, 'get_development_context')).status, 'ready');
 });
