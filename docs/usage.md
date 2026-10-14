@@ -15,6 +15,8 @@ The server asks the agent to load context first and retrieve relevant patterns b
 | `get_development_context` | Both | Select a fixed mode, create/resume a persistent context and load up to 20 compatible global conventions |
 | `search_patterns` | Both | Retrieve compatible approved patterns using required `context_id`, with optional area/kind filters |
 | `get_pattern` | Both | Read a compatible published entry using `context_id`; Maintainers can explicitly request maintenance review |
+| `search_actions` | Both | Search the context's catalog by keywords/module; retrieve a complete action by exact `action_id` |
+| `search_type_reference` | Both | Search type summaries or retrieve formatting by exact `type_name` |
 | `export_knowledge` | Both | Export all published entries |
 | `list_patterns` | Maintainer | List IDs and current revisions, including drafts |
 | `save_draft` | Maintainer | Save a new immutable draft revision |
@@ -87,6 +89,28 @@ At the start of each chat, call `get_development_context({})`: it returns `statu
 Pass `context_id` to every `search_patterns` and development `get_pattern` call. The server derives the mode from the context, including for Maintainers. An optional `power_fx` search argument is only a consistency check: a conflicting value fails. Mode-specific entries from the other edition and `unspecified` entries are excluded; `either` is included. Conventions are filtered before the 20-entry limit. Search and detail responses do not repeat the initial instructions.
 
 The server enforces immutable contexts, not chat identity: the agent must not create another context to switch modes within the same chat. Contexts survive restart and are separate from knowledge import/export. SQLite schema 2 migrates additively to schema 3; the portable JSON format remains version 2. Original content, revisions and bootstrap state are not rewritten. Older server versions that only support SQLite schema 2 cannot open the migrated database. Reconnect clients after upgrading so they load the changed tool schemas; older calls without a context now fail.
+
+## External action and type references
+
+After choosing the mode, use the returned context ID in these calls (examples show arguments, not Robin):
+
+```json
+{"context_id":"<returned UUID>","query":"join text","module":"Text"}
+```
+
+Pass those arguments to `search_actions`. Then request the selected record:
+
+```json
+{"context_id":"<returned UUID>","action_id":"Text.JoinText.Join"}
+```
+
+Use `search_type_reference` with `{"context_id":"<returned UUID>","type_name":"String"}` or a type name returned in the action's parameters. Exact identifiers are case-sensitive; preserve generic type notation. Use English technical keywords for catalog searches. The action category is its upstream `module`.
+
+Search returns five summaries by default (maximum twenty), total match count and a truncation flag. Exact lookup returns one full record or `record: null`; do not combine an exact ID with query/module filters. Action detail includes relevant edition rules and Power Fx runtime caveats. It does not include the entire catalog or repeat the initial prompt.
+
+The source object identifies upstream repository, version, PAD build, commit, edition, license and cache status. `stale` means refresh failed and a previously validated pair is being used. With no valid pair, the tool returns an error; snippet and context tools remain available. Catalog content is separate from the team's published knowledge and is never automatically approved or imported.
+
+`get_development_context` returns the locally reviewed `development_prompt` only after mode selection, without requiring a network call. Shared guidance plus one edition-specific file are loaded from `src/prompts`; restart the server after editing them. Catalog updates do not overwrite these prompts. The agent should distinguish approved originals, adapted code, upstream paste validation and actual PAD execution evidence.
 
 ## Entry fields
 

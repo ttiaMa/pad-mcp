@@ -2,7 +2,7 @@
 
 ## Architecture
 
-One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite and the FTS5 search index share one database file. No AI provider, remote database or GitHub connection is required at runtime.
+One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index and persistent development contexts. No AI provider or remote database is required. Catalog lookups use outbound HTTPS to `api.github.com` and `raw.githubusercontent.com`; approved snippet workflows and initial prompts work without GitHub. No credentials are sent to GitHub.
 
 Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8080. The container runs as the unprivileged `node` user. The image uses Node 24; `npm ci` installs the exact dependency versions in the lockfile. Validate base-image updates before deployment.
 
@@ -16,8 +16,9 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 | `HOST` | Local default `127.0.0.1`; container uses `0.0.0.0` |
 | `PORT` | Application port; Compose uses 8080 |
 | `DATABASE_PATH` | Local `./data/knowledge.sqlite`; container `/app/data/knowledge.sqlite` |
+| `CATALOG_CACHE_PATH` | Optional; defaults to `catalog-cache` beside the database. Compose uses `/app/data/catalog-cache` in the same persistent volume |
 
-The application rejects missing or short Maintainer credentials, short Developer credentials when supplied, and equal Developer/Maintainer tokens. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer token never grants write access.
+The application rejects missing or short Maintainer credentials, short Developer credentials when supplied, and equal Developer/Maintainer tokens. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer token cannot mutate knowledge, but can create development contexts.
 
 ### Database initialization
 
@@ -28,6 +29,16 @@ The image includes `knowledge/seed.json`. On an empty, uninitialized database, s
 To distribute an edited JSON export as the starting collection for a new installation, replace `knowledge/seed.json` before building the image. This does not update an existing database; use the Maintainer tools for ongoing changes. JSON export is not a full database backup.
 
 The database is stored on the `knowledge_data` volume at `/app/data/knowledge.sqlite`. Keep that volume attached across redeployments.
+
+Schema 2 upgrades additively to schema 3 without changing snippet content, revision history or the seed marker. Back up the volume before deploying an upgrade. Older binaries supporting only SQLite schema 2 cannot open schema 3: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
+
+### Catalog persistence and outages
+
+Both editions are downloaded lazily, when their tools are used. A shared cache checks `main` at most once per hour per edition in a running process, resolving a commit and fetching both JSON files from that commit. It retains active and previous validated pairs with checksums. Failed downloads, invalid responses and remote deletions keep the last valid pair; startup validates disk data and can recover the previous pair. First use without a valid cache fails explicitly when GitHub is unavailable. Unauthenticated GitHub rate limits are handled as refresh failures.
+
+The cache directory must be writable by the service user and remain on persistent storage. Include it in volume backups. Do not delete it to resolve a temporary upstream outage. It uses one process per directory, 15-second per-request timeouts and a 10 MiB per-response bound. Interrupted activation may leave unreferenced generations, which are retained rather than guessed as active. See [cache details](catalog.md#stage-2-persistent-catalog-cache).
+
+`/healthz` checks the knowledge database; it does not certify catalog freshness or PAD execution. Catalog responses report `cache_status`, commit, checked time and refresh errors. To verify a deployment, reconnect an MCP client, choose a mode, search an action and retrieve its exact record and a type. Then restart and repeat using the same context ID. Prompts are included by the Dockerfile's existing `COPY src` instruction.
 
 ### Request boundary
 

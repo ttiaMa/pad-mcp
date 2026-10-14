@@ -21,7 +21,7 @@ Only exact detail requests include templates, golden examples or type examples. 
 
 ## Stage 2: persistent catalog cache
 
-`new CatalogCache({ directory })` from `src/catalog-cache.js` supplies `await cache.get('enabled' | 'disabled')`, returning a `CatalogIndex`. The caller must share one cache instance per directory/process. This component is not yet wired into the running MCP server; subsequent integration will place its directory inside the persistent data volume.
+`new CatalogCache({ directory })` from `src/catalog-cache.js` supplies `await cache.get('enabled' | 'disabled')`, returning a `CatalogIndex`. The running server shares one instance across requests and roles. The entrypoint uses `CATALOG_CACHE_PATH`, defaulting beside the database; Compose keeps it inside the persistent data volume.
 
 On first use and the first request after an hour, it resolves GitHub `main` to a commit SHA, then fetches both stable filenames from that immutable commit. When the commit is unchanged, it updates the successful check timestamp without downloading the files again. Concurrent requests for an edition share one operation. The default per-request timeout is 15 seconds and the maximum response size is 10 MiB, checked while streaming as well as against Content-Length. Redirects are rejected. Network operations use fixed GitHub endpoints and no credentials.
 
@@ -37,9 +37,12 @@ The new generation retains the actual last valid pair as its predecessor, includ
 
 The existing MCP knowledge tools now use persistent immutable contexts and mode filters. SQLite migrates additively from schema 2 to 3; knowledge exports remain version 2. New publication requires explicit mode classification. See [Initial context](usage.md#initial-context) for the changed tool contract and client reconnection requirements. No live database reset or reimport is required.
 
-The catalog lookup tools and complete edition-specific prompts are not yet registered; they are the next integration stage.
+## Stage 4: MCP tools and reviewed prompts
 
-## Remaining stages
+`search_actions` and `search_type_reference` are available to both roles and require a valid context before any catalog download. The server derives the edition from the stored mode. Invalid or ambiguous lookup arguments fail before network access. Async download failures are returned as MCP errors; cached fallback carries its stale status and refresh error.
 
-1. MCP lookup tools and reviewed mode-specific prompts.
-2. End-to-end verification and deployment/client documentation.
+The context tool loads shared guidance and only the selected edition's prompt, without downloading a catalog. Read [common](../src/prompts/common.md), [Classic](../src/prompts/classic.md), [Power Fx](../src/prompts/power-fx.md) and [attribution](../src/prompts/NOTICE.md). Full action detail includes type rules and the upstream Power Fx rules/exception metadata where present. Search summaries remain small.
+
+## Verification
+
+`npm run check` covers the new modules. `npm test` exercises local parsing, exact and bounded retrieval, persistence, interrupted writes/activation, previous-generation recovery, schema migration, immutable contexts, publication classification and HTTP MCP integration for both modes and roles. Tests use temporary data and mocked upstream responses; no approved remote knowledge is mutated. Live GitHub checks are separate from this deterministic suite. No automated check executes PAD flows or proves cloud-trigger compatibility.

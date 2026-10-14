@@ -15,6 +15,8 @@ Connect multiple developers' agents to the same endpoint so they can reuse the t
 ## What you can do
 
 - Load shared development conventions before starting a task.
+- Choose Classic or Power Fx once per chat, with a persistent context that fixes the mode for subsequent lookups.
+- Search external actions and types selectively, with full examples only on exact lookup and a persistent cache retaining the previous valid generation.
 - Search approved snippets with area and Power Fx filters, including English/Italian keyword matching.
 - Save pasted Robin code exactly, or import a JSON collection from a file.
 - Review drafts, publish an exact revision, replace outdated implementations, withdraw entries or permanently delete them.
@@ -40,6 +42,12 @@ Roles are enforced on the server using separate Bearer tokens. Developer connect
 Name **pad-mcp** explicitly in your request so the agent knows which MCP server to use. At the start of a new task, ask it to retrieve the initial context:
 
 > Use the pad-mcp MCP server. Call `get_development_context` to load the team's development conventions before working on this task. Then use `search_patterns` to find approved patterns for the implementation needs that arise.
+
+The agent first asks for **Classic or Power Fx**, creates a context and reuses its `context_id`. Development searches return only compatible published snippets. For actions added or adapted, `search_actions` finds candidates by name/module and returns full details by exact `action_id`; `search_type_reference` provides parameter formatting by exact `type_name`. The full JSON catalog stays on the server.
+
+Read the local prompts: [shared guidance](src/prompts/common.md), [Classic](src/prompts/classic.md), [Power Fx](src/prompts/power-fx.md). The technical guidance is adapted from [JoeG592/pad-robin-action-kb](https://github.com/JoeG592/pad-robin-action-kb), licensed CC BY 4.0; see [attribution](src/prompts/NOTICE.md). Catalog paste validation does not certify execution of a generated flow.
+
+**Upgrading:** reconnect clients to refresh tool schemas. `search_patterns` and development `get_pattern` now require `context_id`. Maintainers use `purpose: "maintenance"` for unfiltered draft/history review. SQLite schema 2 migrates additively to 3; knowledge export/import remains version 2. No reset or reimport is required. See [usage](docs/usage.md#initial-context) and [deployment](docs/deployment.md).
 
 As a **Developer**:
 
@@ -178,6 +186,6 @@ This release uses manually configured Bearer tokens. OAuth, individual account m
 
 Project documentation, tool descriptions and messages are in English. User-supplied content is preserved in its original language; bilingual search remains available.
 
-You can publish a JSON knowledge collection independently from the server code, with a license you choose. No software or content license has been selected automatically.
+You can publish your team's JSON knowledge collection independently from the server code, with a license you choose. No license is assigned automatically to your original content. The external catalog and adapted prompt guidance retain their upstream CC BY 4.0 attribution; see [NOTICE](src/prompts/NOTICE.md).
 
 References: [MCP SDK](https://ts.sdk.modelcontextprotocol.io/server), [Coolify Compose](https://coolify.io/docs/applications/builds/docker-compose), [persistent storage](https://coolify.io/docs/applications/configuration/persistent-storage).
