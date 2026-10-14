@@ -33,8 +33,13 @@ At restart the active generation is checked; if invalid, the previous generation
 
 The new generation retains the actual last valid pair as its predecessor, including after recovery. Current and previous files survive remote deletions and invalid JSON responses. A cache error does not involve the approved knowledge database.
 
+## Stage 3: fixed-mode development contexts
+
+The existing MCP knowledge tools now use persistent immutable contexts and mode filters. SQLite migrates additively from schema 2 to 3; knowledge exports remain version 2. New publication requires explicit mode classification. See [Initial context](usage.md#initial-context) for the changed tool contract and client reconnection requirements. No live database reset or reimport is required.
+
+The catalog lookup tools and complete edition-specific prompts are not yet registered; they are the next integration stage.
+
 ## Remaining stages
 
-1. Immutable development contexts and mode-aware approved-pattern filtering.
-2. MCP lookup tools and reviewed mode-specific prompts.
-3. End-to-end verification and deployment/client documentation.
+1. MCP lookup tools and reviewed mode-specific prompts.
+2. End-to-end verification and deployment/client documentation.

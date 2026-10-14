@@ -13,7 +13,7 @@ const sample = {
     id: 'text-example', revision: 1,
     content: contentSchema.parse({
       title: 'Text example', problem: 'Store sample text',
-      robin_code: 'SET Example TO \'sample\'', tags: ['strings', 'stringhe']
+      robin_code: 'SET Example TO \'sample\'', tags: ['strings', 'stringhe'], power_fx: 'disabled'
     })
   }]
 };

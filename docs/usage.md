@@ -12,9 +12,9 @@ The server asks the agent to load context first and retrieve relevant patterns b
 
 | Tool | Role | Purpose |
 | --- | --- | --- |
-| `get_development_context` | Both | Base guidance and up to 20 published conventions in area `global` |
-| `search_patterns` | Both | Retrieve approved patterns with area, kind and Power Fx filters |
-| `get_pattern` | Both | Read an entry by ID, with an optional revision |
+| `get_development_context` | Both | Select a fixed mode, create/resume a persistent context and load up to 20 compatible global conventions |
+| `search_patterns` | Both | Retrieve compatible approved patterns using required `context_id`, with optional area/kind filters |
+| `get_pattern` | Both | Read a compatible published entry using `context_id`; Maintainers can explicitly request maintenance review |
 | `export_knowledge` | Both | Export all published entries |
 | `list_patterns` | Maintainer | List IDs and current revisions, including drafts |
 | `save_draft` | Maintainer | Save a new immutable draft revision |
@@ -24,13 +24,15 @@ The server asks the agent to load context first and retrieve relevant patterns b
 | `delete_pattern` | Maintainer | Permanently remove an entry and all its revisions from the live database |
 | `import_knowledge` | Maintainer | Import up to 20 entries as drafts |
 
-Both roles use the same published collection. Developers retrieve current published revisions; Maintainers can also inspect drafts and history for review. Developers cannot call mutation tools even by name. All access requires authentication.
+Both roles use the same published collection. Development reads return compatible current published revisions. Maintainers can inspect drafts and history with `get_pattern` and `purpose: "maintenance"`, without `context_id`; the response is marked as maintenance content. Developers cannot invoke knowledge mutation tools or maintenance reads, even by name. Both roles may create development contexts. All access still requires authentication; a context ID grants no authorization.
 
 ## Add and approve
 
 Ask the agent to save pasted Robin as a draft, preserving it exactly. `save_draft` takes an `id`, `expected_revision` and `content`. Use revision 0 for a new ID; otherwise read the latest revision first.
 
 After reviewing the draft, approve an exact revision for publication. Saving a newer draft does not replace the previously published revision until publication succeeds.
+
+Publication and replacement require an explicit `power_fx` value of `enabled`, `disabled`, or `either`. Use `either` only when compatibility with both modes is established. Unclassified entries can be saved/imported as drafts, but must receive a new classified revision before publication. This also applies to seed entries published at first startup. Existing published entries are preserved; legacy unclassified entries remain exportable and available for maintenance but are excluded from development.
 
 If your initial message already approves the exact submitted content, the agent can save and publish sequentially. It must not silently change the code or extend that approval to invented metadata. Omit unsupported inferences; ask for clarification only when needed to identify or use the pattern correctly.
 
@@ -79,6 +81,12 @@ A revision conflict rejects the operation. Read the current state before retryin
 Fixed server instructions and base guidance are in `src/server.js`. Changing them requires a process restart or redeployment, and reconnecting clients to refresh server instructions.
 
 Editable development conventions are entries with `kind=convention` and `area=global`. Publish them through the same tools as snippets; the next `get_development_context` call reads the updated database content. All published conventions are shared with Developers. Long collections are capped at 20 global conventions per context response.
+
+At the start of each chat, call `get_development_context({})`: it returns `status: "selection_required"` and no conventions. Ask the user whether the chat uses Classic or Power Fx, then call it with `power_fx: "disabled"` or `"enabled"`. The response contains a persistent `context_id`. Reuse that ID throughout the chat; it cannot change mode. To reload compatible conventions, call `get_development_context({ context_id })`.
+
+Pass `context_id` to every `search_patterns` and development `get_pattern` call. The server derives the mode from the context, including for Maintainers. An optional `power_fx` search argument is only a consistency check: a conflicting value fails. Mode-specific entries from the other edition and `unspecified` entries are excluded; `either` is included. Conventions are filtered before the 20-entry limit. Search and detail responses do not repeat the initial instructions.
+
+The server enforces immutable contexts, not chat identity: the agent must not create another context to switch modes within the same chat. Contexts survive restart and are separate from knowledge import/export. SQLite schema 2 migrates additively to schema 3; the portable JSON format remains version 2. Original content, revisions and bootstrap state are not rewritten. Older server versions that only support SQLite schema 2 cannot open the migrated database. Reconnect clients after upgrading so they load the changed tool schemas; older calls without a context now fail.
 
 ## Entry fields
 

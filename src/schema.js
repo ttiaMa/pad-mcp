@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const idSchema = z.string().min(1).max(100).regex(/^[a-z0-9][a-z0-9_-]*$/);
+export const contextIdSchema = z.string().uuid().describe('Reuse the immutable development context returned at the start of this chat.');
 const shortText = z.string().max(2000);
 const notes = z.array(shortText).max(30).default([]);
 
@@ -13,7 +14,8 @@ export const contentSchema = z.object({
   robin_code: z.string().max(64000).default('').describe('Exact submitted Robin code, including whitespace and comments. Never rewrite or translate it while preparing metadata.'),
   area: z.string().trim().min(1).max(100).default('general').describe('Focused topic such as lists, excel or error-handling; use global for conventions needed at the start of every task.'),
   tags: z.array(z.string().trim().min(1).max(80)).max(30).default([]).describe('Prefer 3-8 specific search terms and useful synonyms. Include relevant team vocabulary; avoid unrelated keyword stuffing.'),
-  power_fx: z.enum(['enabled', 'disabled', 'either', 'unspecified']).default('unspecified'),
+  power_fx: z.enum(['enabled', 'disabled', 'either', 'unspecified']).default('unspecified')
+    .describe('Publication requires enabled, disabled, or either. Use either only when compatibility with both modes is explicitly established. Unspecified is allowed for drafts only.'),
   inputs: notes.describe('Required input values and datatypes supported by the supplied explanation or code.'),
   outputs: notes.describe('Produced values and datatypes; preserve important edge-case behavior.'),
   pitfalls: notes.describe('Known limitations and edge cases stated by the author. Do not add speculative concerns.')
@@ -41,9 +43,10 @@ export const importSchema = z.object({
 }).strict();
 
 export const searchShape = {
+  context_id: contextIdSchema,
   query: z.string().trim().min(1).max(500),
   area: z.string().max(100).optional(),
   kind: z.enum(['snippet', 'convention', 'recipe']).optional(),
-  power_fx: z.enum(['enabled', 'disabled']).optional(),
+  power_fx: z.enum(['enabled', 'disabled']).optional().describe('Optional consistency check only; must match context_id. The server derives the filter from the context.'),
   max_results: z.number().int().min(1).max(10).default(3)
 };

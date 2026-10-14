@@ -17,7 +17,9 @@ import { DatabaseSync } from 'node:sqlite';
 
 const config = { maintainerToken: 'a'.repeat(48), developerToken: 'b'.repeat(48), publicUrl: 'http://localhost:8080' };
 const code = "\r\nSET Example TO $fx'=1'\r\n  # Unicode preservation fixture: café ☕\r\n";
-const content = (extra = {}) => contentSchema.parse({ title: 'Pagination example', problem: 'Divide a list into batches', robin_code: code, tags: ['pagination'], ...extra });
+const content = (extra = {}) => contentSchema.parse({ title: 'Pagination example', problem: 'Divide a list into batches', robin_code: code, tags: ['pagination'], power_fx: 'enabled', ...extra });
+const testContexts = new WeakMap();
+const testRoles = new WeakMap();
 
 async function setup(t) {
   const store = new KnowledgeStore(':memory:');
@@ -36,12 +38,23 @@ async function setup(t) {
     await client.connect(new StreamableHTTPClientTransport(new URL(`${url}/mcp`), {
       requestInit: { headers: { Authorization: `Bearer ${token}` } }
     }));
+    const context = await client.callTool({ name: 'get_development_context', arguments: { power_fx: 'enabled' } });
+    assert.ok(!context.isError);
+    testContexts.set(client, context.structuredContent.context_id);
+    testRoles.set(client, token === config.maintainerToken ? 'maintainer' : 'developer');
     return client;
   }
   return { store, url, maintainer: await connect(config.maintainerToken), developer: await connect(config.developerToken) };
 }
 
 async function call(client, name, args = {}) {
+  // Existing workflow tests use an explicit, previously selected Power Fx context.
+  if (name === 'search_patterns' || (name === 'get_development_context' && Object.keys(args).length === 0)) {
+    args = { context_id: testContexts.get(client), ...args };
+  }
+  if (name === 'get_pattern') {
+    args = { ...(testRoles.get(client) === 'maintainer' ? { purpose: 'maintenance' } : { context_id: testContexts.get(client) }), ...args };
+  }
   const response = await client.callTool({ name, arguments: args });
   assert.ok(!response.isError, JSON.stringify(response));
   return response.structuredContent;
@@ -79,7 +92,7 @@ test('draft -> exact publication -> new draft preserves published code and revis
   assert.equal(conflict.isError, true);
   await publish(maintainer, 'pagination', 2);
   assert.equal((await call(developer, 'search_patterns', { query: 'pagination' })).results[0].revision, 2);
-  const hidden = await developer.callTool({ name: 'get_pattern', arguments: { id: 'pagination', revision: 1 } });
+  const hidden = await developer.callTool({ name: 'get_pattern', arguments: { id: 'pagination', revision: 1, context_id: testContexts.get(developer) } });
   assert.equal(hidden.isError, true);
   assert.equal((await call(maintainer, 'get_pattern', { id: 'pagination', revision: 1 })).content.robin_code, code);
 });
@@ -89,7 +102,7 @@ test('all published content is shared; drafts remain outside Developer retrieval
   await save(maintainer, 'team-convention', { kind: 'convention', area: 'global' });
   assert.equal((await call(developer, 'get_development_context')).conventions.length, 0);
   assert.equal((await call(developer, 'export_knowledge')).entries.length, 0);
-  const hidden = await developer.callTool({ name: 'get_pattern', arguments: { id: 'team-convention' } });
+  const hidden = await developer.callTool({ name: 'get_pattern', arguments: { id: 'team-convention', context_id: testContexts.get(developer) } });
   assert.equal(hidden.isError, true);
   await publish(maintainer, 'team-convention');
   assert.equal((await call(developer, 'get_development_context')).conventions.length, 1);
@@ -130,7 +143,8 @@ test('search handles hostile FTS syntax, no matches, and Power Fx compatibility 
   const { maintainer } = await setup(t);
   await save(maintainer, 'fx', { power_fx: 'enabled', area: 'lists' });
   await publish(maintainer, 'fx');
-  assert.equal((await call(maintainer, 'search_patterns', { query: 'pagination', power_fx: 'disabled' })).results.length, 0);
+  const classic = await call(maintainer, 'get_development_context', { power_fx: 'disabled' });
+  assert.equal((await call(maintainer, 'search_patterns', { query: 'pagination', context_id: classic.context_id })).results.length, 0);
   assert.equal((await call(maintainer, 'search_patterns', { query: 'pagination', power_fx: 'enabled', area: 'lists' })).results.length, 1);
   assert.equal((await call(maintainer, 'search_patterns', { query: 'xyznonexistent' })).results.length, 0);
   assert.equal((await call(maintainer, 'search_patterns', { query: '" OR * : ( )' })).results.length, 0);
@@ -184,7 +198,7 @@ test('development content stays lean through MCP schemas, storage, retrieval and
   for (const client of [maintainer, developer]) {
     assert.deepEqual((await call(client, 'get_pattern', { id: 'lean' })).content, original);
     // Full content remains searchable server-side, including limitations.
-    const response = await client.callTool({ name: 'search_patterns', arguments: { query: 'limitationuniqueterm' } });
+    const response = await client.callTool({ name: 'search_patterns', arguments: { query: 'limitationuniqueterm', context_id: testContexts.get(client) } });
     assert.deepEqual(response.structuredContent.results[0].content, original);
     assert.deepEqual(JSON.parse(response.content[0].text), response.structuredContent);
     assert.deepEqual((await call(client, 'get_development_context')).conventions[0].content, original);
@@ -207,7 +221,7 @@ test('development content stays lean through MCP schemas, storage, retrieval and
 test('unsupported database formats are rejected without changing the file', t => {
   const dir = mkdtempSync(join(tmpdir(), 'pad-mcp-format-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  for (const version of [1, 3]) {
+  for (const version of [1, 4]) {
     const file = join(dir, `version-${version}.sqlite`);
     const db = new DatabaseSync(file);
     db.exec(`CREATE TABLE sample_content (content TEXT); PRAGMA user_version = ${version};`);
@@ -225,7 +239,7 @@ test('SQLite re-open preserves drafts, original bytes, approved revision and ful
   try {
     const file = join(dir, 'knowledge.sqlite');
     store = new KnowledgeStore(file);
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 2);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 3);
     assert.deepEqual(store.db.prepare('PRAGMA table_info(patterns)').all().map(column => column.name), ['id', 'latest_revision', 'published_revision']);
     assert.deepEqual(store.export({}), { schema_version: 2, entries: [], next_offset: null });
     store.saveDraft({ id: 'persisted', expected_revision: 0, content: content() });
@@ -309,7 +323,7 @@ test('approved replacement updates retrieval atomically while retaining Maintain
   assert.equal((await call(developer, 'search_patterns', { query: 'legacyuniqueterm' })).results.length, 0);
   assert.equal((await call(developer, 'search_patterns', { query: 'replacementuniqueterm' })).results[0].revision, 2);
   assert.equal((await call(developer, 'export_knowledge')).entries[0].revision, 2);
-  const oldRevision = await developer.callTool({ name: 'get_pattern', arguments: { id: 'maintained', revision: 1 } });
+  const oldRevision = await developer.callTool({ name: 'get_pattern', arguments: { id: 'maintained', revision: 1, context_id: testContexts.get(developer) } });
   assert.equal(oldRevision.isError, true);
   const stale = await maintainer.callTool({ name: 'replace_pattern', arguments: { id: 'maintained', expected_revision: 1, content: replacement } });
   assert.equal(stale.isError, true);
@@ -360,4 +374,81 @@ test('database failures roll back replacement and deletion, including revisions 
     assert.equal(store.get('rollback', 'developer').content.robin_code, code);
     assert.equal(store.search({ query: 'pagination' }, 'developer').results.length, 1);
   } finally { store.close(); }
+});
+
+test('MCP selection is explicit, context mode is immutable and development cannot bypass filtering', async t => {
+  const { maintainer, developer, store } = await setup(t);
+  const initialCount = store.db.prepare('SELECT COUNT(*) AS n FROM development_contexts').get().n;
+  const initial = await developer.callTool({ name: 'get_development_context', arguments: {} });
+  assert.equal(initial.structuredContent.status, 'selection_required');
+  assert.equal('conventions' in initial.structuredContent, false);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM development_contexts').get().n, initialCount);
+  const classic = await call(developer, 'get_development_context', { power_fx: 'disabled' });
+  const fx = await call(developer, 'get_development_context', { power_fx: 'enabled' });
+  assert.notEqual(classic.context_id, fx.context_id);
+  assert.equal((await call(developer, 'get_development_context', { context_id: classic.context_id })).power_fx, 'disabled');
+  const changed = await developer.callTool({ name: 'get_development_context', arguments: { context_id: classic.context_id, power_fx: 'enabled' } });
+  assert.equal(changed.isError, true);
+  assert.equal(store.requireContext(classic.context_id).power_fx, 'disabled');
+  for (const mode of ['enabled', 'disabled', 'either']) {
+    await save(maintainer, mode, { power_fx: mode, kind: 'convention', area: 'global' });
+    await publish(maintainer, mode);
+  }
+  // Simulate an already published legacy entry. Migration must not relabel or remove it.
+  await save(maintainer, 'legacy', { power_fx: 'either', kind: 'convention', area: 'global' });
+  await publish(maintainer, 'legacy');
+  store.db.prepare("UPDATE revisions SET content = json_set(content, '$.power_fx', 'unspecified') WHERE id = ?").run('legacy');
+  for (const context of [classic, fx]) {
+    const found = await call(developer, 'search_patterns', { context_id: context.context_id, query: 'pagination' });
+    assert.deepEqual(found.results.map(entry => entry.id).sort(), [context.power_fx, 'either'].sort());
+    const loaded = await call(developer, 'get_development_context', { context_id: context.context_id });
+    assert.deepEqual(loaded.conventions.map(entry => entry.id).sort(), [context.power_fx, 'either'].sort());
+  }
+  for (const [name, args] of [
+    ['search_patterns', { query: 'pagination' }],
+    ['search_patterns', { query: 'pagination', context_id: classic.context_id, power_fx: 'enabled' }],
+    ['get_pattern', { id: 'enabled' }],
+    ['get_pattern', { id: 'enabled', context_id: classic.context_id }],
+    ['get_pattern', { id: 'legacy', context_id: fx.context_id }],
+    ['get_pattern', { id: 'disabled', purpose: 'maintenance' }],
+    ['get_development_context', { context_id: '00000000-0000-4000-8000-000000000000' }]
+  ]) {
+    assert.equal((await developer.callTool({ name, arguments: args })).isError, true, name);
+  }
+  // Maintainer development is also filtered and must not return newer drafts.
+  await save(maintainer, 'enabled', { power_fx: 'disabled', robin_code: 'draft only' }, 1);
+  const published = await maintainer.callTool({ name: 'get_pattern', arguments: { id: 'enabled', context_id: fx.context_id } });
+  assert.equal(published.structuredContent.revision, 1);
+  const wrongMode = await maintainer.callTool({ name: 'get_pattern', arguments: { id: 'enabled', context_id: classic.context_id } });
+  assert.equal(wrongMode.isError, true);
+  const review = await call(maintainer, 'get_pattern', { id: 'enabled', purpose: 'maintenance' });
+  assert.equal(review.revision, 2);
+  assert.equal(review.purpose, 'maintenance');
+  assert.equal((await call(maintainer, 'get_pattern', { id: 'legacy' })).content.power_fx, 'unspecified');
+  const tool = (await developer.listTools()).tools.find(entry => entry.name === 'get_development_context');
+  assert.equal(tool.annotations.readOnlyHint, false);
+  assert.equal(tool.annotations.destructiveHint, false);
+  assert.equal((await call(developer, 'export_knowledge')).entries.length, 4);
+});
+
+test('publication and replacement require classification and roll back without rewriting code', async t => {
+  const { maintainer, store } = await setup(t);
+  await save(maintainer, 'unclassified', { power_fx: 'unspecified' });
+  assert.equal((await maintainer.callTool({ name: 'publish_revision', arguments: { id: 'unclassified', revision: 1 } })).isError, true);
+  assert.equal(store.get('unclassified', 'maintainer').content.robin_code, code);
+  assert.equal(store.get('unclassified', 'maintainer').approved_at, null);
+  await save(maintainer, 'unclassified', { power_fx: 'enabled' }, 1);
+  await publish(maintainer, 'unclassified', 2);
+  const before = store.export({});
+  const rejected = await maintainer.callTool({ name: 'replace_pattern', arguments: {
+    id: 'unclassified', expected_revision: 2, content: content({ power_fx: 'unspecified' })
+  } });
+  assert.equal(rejected.isError, true);
+  assert.deepEqual(store.export({}), before);
+  assert.equal(store.get('unclassified', 'maintainer').revision, 2);
+  assert.equal(store.get('unclassified', 'maintainer', 1).content.robin_code, code);
+  // Import remains portable v2 and can retain unclassified entries as drafts.
+  const imported = { id: 'unclassified-import', revision: 1, content: content({ power_fx: 'unspecified' }) };
+  await call(maintainer, 'import_knowledge', { package: { schema_version: 2, entries: [imported] } });
+  assert.equal(store.get(imported.id, 'maintainer').published, false);
 });
