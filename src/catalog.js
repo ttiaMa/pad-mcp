@@ -89,9 +89,10 @@ export class CatalogIndex {
   #types;
   #source;
 
-  constructor(input, { commit = null, checked_at = null, cache_status = 'not_managed' } = {}) {
+  constructor(input, { commit = null, checked_at = null, cache_status = 'not_managed', refresh_error = null } = {}) {
     this.#pair = parseCatalogPair(input);
-    this.#source = { repository: CATALOG_REPOSITORY, commit, checked_at, cache_status };
+    this.#source = { repository: CATALOG_REPOSITORY, commit, checked_at, cache_status,
+      ...(refresh_error ? { refresh_error } : {}) };
     this.#actions = this.#pair.actions.actions.map(record => indexRecord(record, record.actionId, [
       record.actionId, record.module, record.selector ?? '', record.description ?? '',
       ...record.input_params.flatMap(p => [p.name, p.type]),

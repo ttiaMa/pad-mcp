@@ -4,7 +4,7 @@
 
 `src/catalog.js` provides a local-only parser and index for the Classic and Power Fx editions of [JoeG592/pad-robin-action-kb](https://github.com/JoeG592/pad-robin-action-kb). Upstream catalog content is licensed CC BY 4.0. Lookup responses retain attribution and the upstream version and declared PAD build. The test records are synthetic, not copied or PAD-tested examples.
 
-This stage does not register MCP tools, download or cache files, create development contexts, or modify the knowledge database. Those integrations follow in subsequent stages.
+The parser itself does not register MCP tools, download or cache files, create development contexts, or modify the knowledge database.
 
 `parseCatalogPair({ actions, types, power_fx })` accepts JSON strings or parsed documents. It validates required record fields, nonempty collections, unique identifiers and matching editions. It preserves additional upstream fields and allows action and type documents to have different version numbers. Classic currently omits `edition`; Power Fx must declare `power-fx`. Validation does not establish that the two documents came from the same commit; the future loader must supply that guarantee.
 
@@ -19,9 +19,22 @@ Search defaults to five compact results, with a maximum of twenty, a total match
 
 Only exact detail requests include templates, golden examples or type examples. Returned details are detached copies so callers cannot mutate the index. Upstream paste-validation statements are preserved as source claims, not execution guarantees for generated flows.
 
+## Stage 2: persistent catalog cache
+
+`new CatalogCache({ directory })` from `src/catalog-cache.js` supplies `await cache.get('enabled' | 'disabled')`, returning a `CatalogIndex`. The caller must share one cache instance per directory/process. This component is not yet wired into the running MCP server; subsequent integration will place its directory inside the persistent data volume.
+
+On first use and the first request after an hour, it resolves GitHub `main` to a commit SHA, then fetches both stable filenames from that immutable commit. When the commit is unchanged, it updates the successful check timestamp without downloading the files again. Concurrent requests for an edition share one operation. The default per-request timeout is 15 seconds and the maximum response size is 10 MiB, checked while streaming as well as against Content-Length. Redirects are rejected. Network operations use fixed GitHub endpoints and no credentials.
+
+Each edition has a `manifest.json` pointing to active and previous UUID generation directories. A generation contains the original action/type JSON and metadata with mode, commit, download time and SHA-256 checksums. New files are written and synced in a temporary directory, parsed as a complete pair, moved into a generation directory and read back for checksum/schema verification. A same-directory atomic manifest rename activates the pair. No active file is overwritten during download.
+
+After successful activation, both retained generations are revalidated before older previously referenced generations are removed. Cleanup deletes only known files, without recursive removal. Cleanup failures and unreferenced generations left by interrupted activation are conservatively retained. This is process-crash recovery with filesystem rename semantics, not a backup against volume loss or a guarantee against hardware/power failures.
+
+At restart the active generation is checked; if invalid, the previous generation is tried. Download, validation or activation failures return the last valid pair with `cache_status: stale` and `refresh_error`. Failed refreshes are retried after an hour in the same process; restarting permits a new attempt. No valid pair means an explicit error, never an empty catalog or a switch to another edition. An unreadable manifest is not guessed from arbitrary directories: existing files are retained and a fresh download is attempted.
+
+The new generation retains the actual last valid pair as its predecessor, including after recovery. Current and previous files survive remote deletions and invalid JSON responses. A cache error does not involve the approved knowledge database.
+
 ## Remaining stages
 
-1. Persistent, atomic catalog cache retaining the active and previous valid pair.
-2. Immutable development contexts and mode-aware approved-pattern filtering.
-3. MCP lookup tools and reviewed mode-specific prompts.
-4. End-to-end verification and deployment/client documentation.
+1. Immutable development contexts and mode-aware approved-pattern filtering.
+2. MCP lookup tools and reviewed mode-specific prompts.
+3. End-to-end verification and deployment/client documentation.
