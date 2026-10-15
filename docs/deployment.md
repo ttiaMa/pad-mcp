@@ -34,7 +34,7 @@ Schema 2 upgrades additively to schema 3 without changing snippet content, revis
 
 ### Catalog persistence and outages
 
-Both editions are downloaded lazily, when their tools are used. A shared cache checks `main` at most once per hour per edition in a running process, resolving a commit and fetching both JSON files from that commit. It retains active and previous validated pairs with checksums. Failed downloads, invalid responses and remote deletions keep the last valid pair; startup validates disk data and can recover the previous pair. First use without a valid cache fails explicitly when GitHub is unavailable. Unauthenticated GitHub rate limits are handled as refresh failures.
+Both editions are downloaded lazily, when their tools are used. A shared cache checks `main` at most once every 12 hours per edition in a running process, resolving a commit and fetching both JSON files from that commit. It retains active and previous validated pairs with checksums. Failed downloads, invalid responses and remote deletions keep the last valid pair; startup validates disk data and can recover the previous pair. First use without a valid cache fails explicitly when GitHub is unavailable. Unauthenticated GitHub rate limits are handled as refresh failures.
 
 The cache directory must be writable by the service user and remain on persistent storage. Include it in volume backups. Do not delete it to resolve a temporary upstream outage. It uses one process per directory, 15-second per-request timeouts and a 10 MiB per-response bound. Interrupted activation may leave unreferenced generations, which are retained rather than guessed as active. See [cache details](catalog.md#stage-2-persistent-catalog-cache).
 

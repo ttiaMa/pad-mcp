@@ -519,7 +519,7 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
     const type = await call(developer, 'search_type_reference', { context_id: id, type_name: 'String' });
     assert.equal(type.record.example, mode + ' text');
   }
-  offline = true; now += 3600000;
+  offline = true; now += 12 * 3600000;
   const stale = await call(developer, 'search_actions', { context_id: fx, action_id: 'Text.Action0' });
   assert.equal(stale.source.cache_status, 'stale');
   assert.ok(stale.source.refresh_error);

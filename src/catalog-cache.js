@@ -15,7 +15,7 @@ const metadataSchema = z.object({
   checksums: z.object({ actions: z.string().regex(/^[a-f0-9]{64}$/), types: z.string().regex(/^[a-f0-9]{64}$/) })
 });
 const hash = value => createHash('sha256').update(value).digest('hex');
-const HOUR = 60 * 60 * 1000;
+const REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 /** One instance per data directory/process. HTTP sessions share this instance. */
 export class CatalogCache {
@@ -107,7 +107,7 @@ export class CatalogCache {
       try {
         const generation = await this.#readGeneration(root, id, mode);
         const recovered = id !== manifest.active;
-        return { generation, manifest, next_check: recovered ? 0 : Date.parse(manifest.checked_at) + HOUR,
+        return { generation, manifest, next_check: recovered ? 0 : Date.parse(manifest.checked_at) + REFRESH_INTERVAL_MS,
           error: recovered ? 'Active cache failed validation; using the previous valid pair.' : null };
       } catch { /* Try the previous pair without deleting either generation. */ }
     }
@@ -141,7 +141,7 @@ export class CatalogCache {
       const manifest = { active: state.generation.id,
         previous: state.manifest?.active === state.generation.id ? state.manifest.previous : null, checked_at };
       await this.#activate(root, manifest);
-      return { generation: state.generation, manifest, next_check: this.#now() + HOUR, error: null };
+      return { generation: state.generation, manifest, next_check: this.#now() + REFRESH_INTERVAL_MS, error: null };
     }
     const input = { power_fx: mode };
     for (const [kind, file] of Object.entries(catalogFiles(mode))) {
@@ -177,7 +177,7 @@ export class CatalogCache {
         }
       } catch { /* Retain extra files rather than risk the valid pair. */ }
     }
-    return { generation, manifest, next_check: this.#now() + HOUR, error: null };
+    return { generation, manifest, next_check: this.#now() + REFRESH_INTERVAL_MS, error: null };
   }
 
   async #get(mode) {
@@ -187,7 +187,7 @@ export class CatalogCache {
     if (this.#now() >= state.next_check) {
       try { state = await this.#refresh(root, mode, state); }
       catch (error) {
-        state = { ...state, next_check: this.#now() + HOUR,
+        state = { ...state, next_check: this.#now() + REFRESH_INTERVAL_MS,
           error: `Catalog refresh failed: ${error.name === 'AbortError' ? 'request timed out' : error.message}` };
       }
     }

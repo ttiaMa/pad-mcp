@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogCache } from '../src/catalog-cache.js';
 
-const HOUR = 3600000;
+const REFRESH_INTERVAL_MS = 12 * 3600000;
 function documents(mode, version) {
   const header = { name: 'Synthetic', license: 'CC BY 4.0', version,
     ...(mode === 'enabled' ? { edition: 'power-fx' } : {}) };
@@ -43,7 +43,7 @@ async function fixture(t, options = {}) {
   return {
     directory, urls, cache: new CatalogCache(config),
     restart: (extra = {}) => new CatalogCache({ ...config, ...extra }),
-    advance: () => { time += HOUR; },
+    advance: (milliseconds = REFRESH_INTERVAL_MS) => { time += milliseconds; },
     version: value => { version = value; },
     fail: handler => { failure = handler; },
     manifest: async (mode = 'disabled') => JSON.parse(await fs.readFile(join(directory, mode, 'manifest.json'), 'utf8'))
@@ -51,7 +51,7 @@ async function fixture(t, options = {}) {
 }
 const detail = index => index.searchActions({ action_id: 'Text.Join' });
 
-test('pins both files to one commit, coalesces requests and persists the hourly check', async t => {
+test('pins both files to one commit, coalesces requests and persists the twelve-hour check', async t => {
   const f = await fixture(t);
   const indexes = await Promise.all(Array.from({ length: 10 }, () => f.cache.get('disabled')));
   assert.equal(f.urls.length, 3);
@@ -59,7 +59,11 @@ test('pins both files to one commit, coalesces requests and persists the hourly 
   assert.equal(detail(indexes[0]).source.cache_status, 'fresh');
   assert.equal(detail(await f.restart().get('disabled')).record.golden_example, 'disabled-a');
   assert.equal(f.urls.length, 3);
-  f.advance();
+  f.advance(REFRESH_INTERVAL_MS - 1);
+  await f.cache.get('disabled');
+  await f.restart().get('disabled');
+  assert.equal(f.urls.length, 3); // No remote check before twelve hours, including after restart.
+  f.advance(1);
   await f.cache.get('disabled');
   assert.equal(f.urls.length, 4); // Same commit: no JSON downloads.
   await f.restart().get('disabled');
@@ -100,7 +104,7 @@ test('404, malformed or wrong-edition updates never replace or delete the valid 
     assert.deepEqual(await f.manifest(), before);
     const calls = f.urls.length;
     await f.cache.get('disabled');
-    assert.equal(f.urls.length, calls); // Failure backoff is also one hour.
+    assert.equal(f.urls.length, calls); // Failure backoff is also twelve hours.
     assert.equal(detail(await f.restart().get('disabled')).record.golden_example, 'disabled-a');
   }
 });

@@ -4,7 +4,7 @@
 
 Use `https://mcp.example.com/mcp` with `Authorization: Bearer <token>`. Choose the Developer token for development assistance and the Maintainer token for maintaining the collection.
 
-Follow the [Codex and Claude Code setup instructions](../README.md#connect-codex-or-claude-code) for client configuration, environment variables and connection checks. Both clients use `PAD_MCP_TOKEN`; its value determines the role. The project's `.env` configures the server and transfer script, not the agent's environment.
+Follow the [Codex and Claude Code setup instructions](setup.md#connect-codex-or-claude-code) for client configuration, environment variables and connection checks. Both clients use `PAD_MCP_TOKEN`; its value determines the role. The project's `.env` configures the server and transfer script, not the agent's environment.
 
 The server asks the agent to load context first and retrieve relevant patterns before implementation. Actual tool use depends on the agent and client. For RPA migration, the agent interprets the source logic and searches for the PAD implementation needs individually, such as batching, retries or Excel handling. Validate the resulting flow in PAD.
 
