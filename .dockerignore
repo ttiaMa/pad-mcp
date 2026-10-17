@@ -6,6 +6,5 @@ data
 exports
 coverage
 test
-test-support
 *.sqlite*
 *.log

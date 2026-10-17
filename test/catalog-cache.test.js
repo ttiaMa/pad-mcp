@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogCache, CHECK_INTERVAL_MS } from '../src/catalog-cache.js';
 import { CATALOG_REPOSITORY } from '../src/catalog.js';
-import { documents, writeBundle } from '../test-support/catalog.js';
+import { documents, writeBundle } from './fixtures/catalog.js';
 
 async function fixture(t, options = {}) {
   const root = await fs.mkdtemp(join(tmpdir(), 'pad-catalog-cache-'));

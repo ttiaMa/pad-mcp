@@ -15,7 +15,7 @@ import { createApp, validateConfig } from '../src/server.js';
 import { contentSchema } from '../src/schema.js';
 import { DatabaseSync } from 'node:sqlite';
 import { CatalogCache } from '../src/catalog-cache.js';
-import { documents, writeBundle } from '../test-support/catalog.js';
+import { documents, writeBundle } from './fixtures/catalog.js';
 
 const config = { maintainerToken: 'a'.repeat(48), developerToken: 'b'.repeat(48), publicUrl: 'http://localhost:8080' };
 const code = "\r\nSET Example TO $fx'=1'\r\n  # Unicode preservation fixture: café ☕\r\n";

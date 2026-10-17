@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { catalogFiles } from '../src/catalog.js';
+import { catalogFiles } from '../../src/catalog.js';
 
 export function documents(mode, version) {
   const header = { name: 'Synthetic', license: 'CC BY 4.0', version,
