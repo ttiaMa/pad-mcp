@@ -2,6 +2,7 @@ import { KnowledgeStore } from './store.js';
 import { bootstrapKnowledge } from './bootstrap.js';
 import { createApp, validateConfig } from './server.js';
 import { dirname, join } from 'node:path';
+import { CatalogCache } from './catalog-cache.js';
 
 const port = Number(process.env.PORT ?? 8080);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be between 1 and 65535.');
@@ -21,15 +22,18 @@ try {
   store.close();
   throw error;
 }
-const app = createApp(store, config);
+const catalogCache = new CatalogCache({ directory: config.catalogCachePath });
+catalogCache.start();
+const app = createApp(store, config, { catalogCache });
 const listener = app.listen(port, process.env.HOST ?? '127.0.0.1', () => {
   console.log(`pad-mcp ready on port ${port}; MCP endpoint: ${config.publicUrl}/mcp`);
 });
-listener.on('error', error => { console.error(error); store.close(); process.exitCode = 1; });
+listener.on('error', error => { console.error(error); catalogCache.stop(); store.close(); process.exitCode = 1; });
 let stopping = false;
 function stop() {
   if (stopping) return;
   stopping = true;
+  catalogCache.stop();
   const timer = setTimeout(() => process.exit(1), 10000);
   timer.unref();
   listener.close(() => { store.close(); clearTimeout(timer); });

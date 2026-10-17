@@ -18,6 +18,8 @@ The server asks the agent to load context first and retrieve relevant patterns b
 | `search_actions` | Both | Search the context's catalog by keywords/module; retrieve a complete action by exact `action_id` |
 | `search_type_reference` | Both | Search type summaries or retrieve formatting by exact `type_name` |
 | `export_knowledge` | Both | Export all published entries |
+| `get_catalog_update_status` | Maintainer | Read the daily check and pending catalog proposal without activating it |
+| `update_catalogs` | Maintainer | After explicit approval, replace both local editions with the exact offered commit |
 | `list_patterns` | Maintainer | List IDs and current revisions, including drafts |
 | `save_draft` | Maintainer | Save a new immutable draft revision |
 | `publish_revision` | Maintainer | Publish the exact latest revision for the team |
@@ -27,6 +29,12 @@ The server asks the agent to load context first and retrieve relevant patterns b
 | `import_knowledge` | Maintainer | Import up to 20 entries as drafts |
 
 Both roles use the same published collection. Development reads return compatible current published revisions. Maintainers can inspect drafts and history with `get_pattern` and `purpose: "maintenance"`, without `context_id`; the response is marked as maintenance content. Developers cannot invoke knowledge mutation tools or maintenance reads, even by name. Both roles may create development contexts. All access still requires authentication; a context ID grants no authorization.
+
+## Approve reference catalog updates
+
+Classic and Power Fx references are bundled and available offline. The server checks the upstream repository once every 24 hours in the background. At the start of a Maintainer chat, call `get_development_context` (also for maintenance-only chats). Its `catalog_update` field reports any pending update and links to [the upstream repository](https://github.com/JoeG592/pad-robin-action-kb). The agent asks whether to replace the locally saved JSON files. Developer chats do not receive this proposal.
+
+If you approve, the agent calls `update_catalogs` with `{"expected_commit":"<available_commit from the proposal>","confirmed":true}`. The server downloads and validates all four files from that exact commit, then replaces both editions together. The saved update takes precedence over the bundle and becomes the baseline for subsequent checks. If the proposal has changed, review the new proposal before approving again. On failure the current catalogs remain available; retrying the same pending update requires an explicit tool call. Declining leaves the files unchanged and the proposal available for a later chat. `get_catalog_update_status` lets a Maintainer revisit it without bypassing the daily check interval.
 
 ## Add and approve
 

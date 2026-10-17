@@ -1,0 +1,2 @@
+# Keep upstream JSON bytes unchanged on every platform: metadata records SHA-256 hashes.
+catalogs/*.json -text

@@ -1,64 +1,49 @@
 import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { CatalogIndex, catalogFiles, parseCatalogPair } from './catalog.js';
+import { CatalogIndex, CATALOG_REPOSITORY, catalogFiles, parseCatalogPair } from './catalog.js';
 
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
-const generationId = z.string().uuid();
-const date = z.string().datetime();
-const manifestSchema = z.object({
-  active: generationId, previous: generationId.nullable(), checked_at: date
-});
-const metadataSchema = z.object({
-  power_fx: z.enum(['enabled', 'disabled']), commit: sha, downloaded_at: date,
-  checksums: z.object({ actions: z.string().regex(/^[a-f0-9]{64}$/), types: z.string().regex(/^[a-f0-9]{64}$/) })
-});
+const manifestSchema = z.object({ active: z.string().uuid(), previous: z.string().uuid().nullable() });
+const metadataSchema = z.object({ commit: sha, downloaded_at: z.string().datetime(),
+  checksums: z.record(z.string().regex(/^[a-f0-9]{64}$/)) });
+const checkSchema = z.object({ checked_at: z.string().datetime(), latest_commit: sha.nullable(), error: z.string().nullable() });
 const hash = value => createHash('sha256').update(value).digest('hex');
-const REFRESH_INTERVAL_MS = 12 * 60 * 60 * 1000;
+export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const modes = ['disabled', 'enabled'];
+const files = modes.flatMap(mode => Object.values(catalogFiles(mode)));
+const bundledDirectory = fileURLToPath(new URL('../catalogs/', import.meta.url));
 
-/** One instance per data directory/process. HTTP sessions share this instance. */
+/** One instance/process per data directory, shared by every role and HTTP request. */
 export class CatalogCache {
-  #directory;
-  #fetch;
-  #now;
-  #io;
-  #timeout;
-  #maxBytes;
-  #states = new Map();
-  #pending = new Map();
+  #directory; #bundle; #fetch; #now; #io; #timeout; #maxBytes;
+  #loading; #snapshot; #manifest = null; #check = null; #recoveryError = null;
+  #queue = Promise.resolve(); #timer; #running = false;
 
-  constructor({ directory, fetch = globalThis.fetch, now = Date.now, timeout_ms = 15000,
-    max_bytes = 10 * 1024 * 1024, io = fs }) {
+  constructor({ directory, bundle_directory = bundledDirectory, fetch = globalThis.fetch,
+    now = Date.now, timeout_ms = 15000, max_bytes = 10 * 1024 * 1024, io = fs }) {
     if (typeof directory !== 'string' || !directory) throw new Error('A cache directory is required.');
     if (!Number.isSafeInteger(timeout_ms) || timeout_ms < 1 || !Number.isSafeInteger(max_bytes) || max_bytes < 1) {
       throw new Error('Cache timeout and size limits must be positive integers.');
     }
-    this.#directory = directory;
-    this.#fetch = fetch;
-    this.#now = now;
-    this.#io = io;
-    this.#timeout = timeout_ms;
-    this.#maxBytes = max_bytes;
+    this.#directory = directory; this.#bundle = bundle_directory; this.#fetch = fetch;
+    this.#now = now; this.#io = io; this.#timeout = timeout_ms; this.#maxBytes = max_bytes;
   }
 
-  async get(powerFx) {
-    catalogFiles(powerFx); // Validate before constructing filesystem paths.
-    if (!this.#pending.has(powerFx)) {
-      const work = this.#get(powerFx).finally(() => this.#pending.delete(powerFx));
-      this.#pending.set(powerFx, work);
-    }
-    return this.#pending.get(powerFx);
+  #exclusive(work) {
+    const pending = this.#queue.then(work);
+    this.#queue = pending.catch(() => {});
+    return pending;
   }
 
   async #download(url) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeout);
     try {
-      const response = await this.#fetch(url, {
-        signal: controller.signal, redirect: 'error',
-        headers: { Accept: 'application/json', 'User-Agent': 'pad-mcp-catalog' }
-      });
+      const response = await this.#fetch(url, { signal: controller.signal, redirect: 'error',
+        headers: { Accept: 'application/json', 'User-Agent': 'pad-mcp-catalog' } });
       if (!response.ok) throw new Error(`Catalog HTTP ${response.status}.`);
       if (Number(response.headers.get('content-length')) > this.#maxBytes) throw new Error('Catalog exceeds size limit.');
       if (!response.body) throw new Error('Catalog response has no body.');
@@ -69,11 +54,8 @@ export class CatalogCache {
         if (size > this.#maxBytes) throw new Error('Catalog exceeds size limit.');
         chunks.push(Buffer.from(chunk));
       }
-      return Buffer.concat(chunks).toString('utf8');
-    } finally {
-      controller.abort();
-      clearTimeout(timer);
-    }
+      return Buffer.concat(chunks);
+    } finally { controller.abort(); clearTimeout(timer); }
   }
 
   async #write(path, value) {
@@ -82,120 +64,160 @@ export class CatalogCache {
     finally { await handle.close(); }
   }
 
-  async #readGeneration(root, id, mode) {
-    generationId.parse(id);
-    const directory = join(root, id);
-    const metadata = metadataSchema.parse(JSON.parse(await this.#io.readFile(join(directory, 'metadata.json'), 'utf8')));
-    if (metadata.power_fx !== mode) throw new Error('Cached edition mismatch.');
-    const input = { power_fx: mode };
-    for (const kind of ['actions', 'types']) {
-      const bytes = await this.#io.readFile(join(directory, `${kind}.json`));
-      if (hash(bytes) !== metadata.checksums[kind]) throw new Error('Cached catalog checksum mismatch.');
-      input[kind] = bytes.toString('utf8');
-    }
-    return { id, metadata, pair: parseCatalogPair(input) };
-  }
-
-  async #load(root, mode) {
-    let manifest;
-    try { manifest = manifestSchema.parse(JSON.parse(await this.#io.readFile(join(root, 'manifest.json'), 'utf8'))); }
-    catch (error) {
-      return { generation: null, manifest: null, next_check: 0,
-        error: error.code === 'ENOENT' ? null : 'Cache manifest is unreadable; existing files were retained.' };
-    }
-    for (const id of [manifest.active, manifest.previous].filter(Boolean)) {
-      try {
-        const generation = await this.#readGeneration(root, id, mode);
-        const recovered = id !== manifest.active;
-        return { generation, manifest, next_check: recovered ? 0 : Date.parse(manifest.checked_at) + REFRESH_INTERVAL_MS,
-          error: recovered ? 'Active cache failed validation; using the previous valid pair.' : null };
-      } catch { /* Try the previous pair without deleting either generation. */ }
-    }
-    return { generation: null, manifest, next_check: 0, error: 'No valid cached catalog pair.' };
-  }
-
-  async #activate(root, manifest) {
-    const temporary = join(root, `${randomUUID()}.manifest.tmp`);
+  async #writePointer(file, value) {
+    await this.#io.mkdir(this.#directory, { recursive: true });
+    const temporary = join(this.#directory, `${randomUUID()}.tmp`);
     try {
-      await this.#write(temporary, JSON.stringify(manifest));
-      // Same-directory rename replaces only the pointer, after both documents are durable.
-      await this.#io.rename(temporary, join(root, 'manifest.json'));
+      await this.#write(temporary, JSON.stringify(value));
+      await this.#io.rename(temporary, join(this.#directory, file));
     } finally { await this.#io.unlink(temporary).catch(() => {}); }
   }
 
-  async #removeGeneration(root, id) {
-    // Delete only the known files of a previously referenced generation; never recurse.
-    generationId.parse(id);
-    const directory = join(root, id);
-    for (const file of ['actions.json', 'types.json', 'metadata.json']) {
+  async #readSnapshot(directory, id = null) {
+    const metadata = metadataSchema.parse(JSON.parse(await this.#io.readFile(join(directory, 'metadata.json'), 'utf8')));
+    const pairs = {};
+    for (const mode of modes) {
+      const input = { power_fx: mode };
+      for (const [kind, file] of Object.entries(catalogFiles(mode))) {
+        const bytes = await this.#io.readFile(join(directory, file));
+        if (hash(bytes) !== metadata.checksums[file]) throw new Error('Catalog checksum mismatch.');
+        input[kind] = bytes.toString('utf8');
+      }
+      pairs[mode] = parseCatalogPair(input);
+    }
+    return { id, metadata, pairs };
+  }
+
+  async #load() {
+    try {
+      this.#check = checkSchema.parse(JSON.parse(await this.#io.readFile(join(this.#directory, 'check.json'), 'utf8')));
+    } catch { /* A missing/corrupt check record permits a fresh check, never an update. */ }
+    try {
+      this.#manifest = manifestSchema.parse(JSON.parse(await this.#io.readFile(join(this.#directory, 'manifest.json'), 'utf8')));
+      for (const id of [this.#manifest.active, this.#manifest.previous].filter(Boolean)) {
+        try {
+          this.#snapshot = await this.#readSnapshot(join(this.#directory, id), id);
+          if (id !== this.#manifest.active) this.#recoveryError = 'Active catalog failed validation; using the previous approved snapshot.';
+          return;
+        } catch { /* Preserve files and try the previous complete snapshot. */ }
+      }
+      this.#recoveryError = 'No valid approved snapshot; using bundled catalogs.';
+    } catch (error) {
+      if (error.code !== 'ENOENT') this.#recoveryError = 'Catalog manifest is unreadable; using bundled catalogs. Existing files were retained.';
+    }
+    this.#snapshot = await this.#readSnapshot(this.#bundle);
+  }
+
+  async #ready() {
+    this.#loading ??= this.#load().catch(error => { this.#loading = null; throw error; });
+    await this.#loading;
+  }
+
+  /** Lookups are entirely local, including on first use. */
+  async get(mode) {
+    catalogFiles(mode);
+    await this.#ready();
+    const error = this.#recoveryError ?? this.#check?.error;
+    return new CatalogIndex(this.#snapshot.pairs[mode], {
+      commit: this.#snapshot.metadata.commit, checked_at: this.#check?.checked_at ?? null,
+      cache_status: error ? 'stale' : this.#snapshot.id ? 'approved' : 'bundled', refresh_error: error
+    });
+  }
+
+  #status() {
+    const baseline = this.#snapshot.metadata.commit;
+    const pending = this.#check?.latest_commit && this.#check.latest_commit !== baseline;
+    return {
+      status: pending ? 'update_available' : 'current', repository: CATALOG_REPOSITORY,
+      baseline_commit: baseline, available_commit: pending ? this.#check.latest_commit : null,
+      checked_at: this.#check?.checked_at ?? null,
+      check_error: this.#check?.error ?? null, recovery_error: this.#recoveryError,
+      ...(pending ? { approval_required: true,
+        message: `Updated PAD references are available at ${CATALOG_REPOSITORY}. Would you like to replace the locally saved Classic and Power Fx JSON catalogs?`,
+        instructions: 'Show the repository link and ask the maintainer for approval. Only after explicit approval call update_catalogs with available_commit as expected_commit and confirmed=true. If declined, keep the current catalogs.' } : {})
+    };
+  }
+
+  /** Persist successful and failed checks so restarts respect the daily interval. */
+  checkForUpdates() {
+    return this.#exclusive(async () => {
+      await this.#ready();
+      if (!this.#check || this.#now() >= Date.parse(this.#check.checked_at) + CHECK_INTERVAL_MS) {
+        const checked_at = new Date(this.#now()).toISOString();
+        try {
+          const head = JSON.parse((await this.#download('https://api.github.com/repos/JoeG592/pad-robin-action-kb/commits/main')).toString('utf8'));
+          this.#check = { checked_at, latest_commit: sha.parse(head.sha), error: null };
+        } catch (error) {
+          this.#check = { checked_at, latest_commit: this.#check?.latest_commit ?? null,
+            error: `Catalog check failed: ${error.name === 'AbortError' ? 'request timed out' : error.message}` };
+        }
+        try { await this.#writePointer('check.json', this.#check); }
+        catch { this.#check.error = 'Catalog check could not be persisted; daily backoff applies only until restart.'; }
+      }
+      return this.#status();
+    });
+  }
+
+  /** Called only by the maintainer-only MCP tool after explicit approval of this SHA. */
+  update({ expected_commit, confirmed }) {
+    return this.#exclusive(async () => {
+      sha.parse(expected_commit);
+      if (confirmed !== true) throw new Error('Explicit maintainer approval is required.');
+      await this.#ready();
+      if (expected_commit === this.#snapshot.metadata.commit) return this.#status();
+      if (expected_commit !== this.#check?.latest_commit) throw new Error('The proposed update changed. Read catalog update status and obtain approval again.');
+      const id = randomUUID();
+      const staging = join(this.#directory, `${id}.tmp`);
+      await this.#io.mkdir(staging, { recursive: true });
+      const metadata = { commit: expected_commit, downloaded_at: new Date(this.#now()).toISOString(), checksums: {} };
+      try {
+        for (const file of files) {
+          const bytes = await this.#download(`https://raw.githubusercontent.com/JoeG592/pad-robin-action-kb/${expected_commit}/${file}`);
+          metadata.checksums[file] = hash(bytes);
+          await this.#write(join(staging, file), bytes);
+        }
+        await this.#write(join(staging, 'metadata.json'), JSON.stringify(metadata));
+        await this.#readSnapshot(staging); // All four documents must validate before activation.
+        await this.#io.rename(staging, join(this.#directory, id));
+      } finally { await this.#removeKnownFiles(staging).catch(() => {}); }
+      const snapshot = await this.#readSnapshot(join(this.#directory, id), id);
+      const manifest = { active: id, previous: this.#snapshot.id };
+      await this.#writePointer('manifest.json', manifest);
+      const oldManifest = this.#manifest;
+      this.#snapshot = snapshot; this.#manifest = manifest; this.#recoveryError = null;
+      // Retain active + previous approved snapshots; never delete orphan generations.
+      try {
+        await this.#readSnapshot(join(this.#directory, id), id);
+        if (manifest.previous) await this.#readSnapshot(join(this.#directory, manifest.previous), manifest.previous);
+        for (const old of new Set([oldManifest?.active, oldManifest?.previous].filter(Boolean))) {
+          if (old !== id && old !== manifest.previous) await this.#removeKnownFiles(join(this.#directory, old));
+        }
+      } catch { /* Cleanup failure must not invalidate successful activation. */ }
+      return this.#status();
+    });
+  }
+
+  async #removeKnownFiles(directory) {
+    for (const file of [...files, 'metadata.json']) {
       await this.#io.unlink(join(directory, file)).catch(error => { if (error.code !== 'ENOENT') throw error; });
     }
     await this.#io.rmdir(directory);
   }
 
-  async #refresh(root, mode, state) {
-    const head = JSON.parse(await this.#download('https://api.github.com/repos/JoeG592/pad-robin-action-kb/commits/main'));
-    const commit = sha.parse(head.sha);
-    const checked_at = new Date(this.#now()).toISOString();
-    if (state.generation?.metadata.commit === commit) {
-      const manifest = { active: state.generation.id,
-        previous: state.manifest?.active === state.generation.id ? state.manifest.previous : null, checked_at };
-      await this.#activate(root, manifest);
-      return { generation: state.generation, manifest, next_check: this.#now() + REFRESH_INTERVAL_MS, error: null };
-    }
-    const input = { power_fx: mode };
-    for (const [kind, file] of Object.entries(catalogFiles(mode))) {
-      input[kind] = await this.#download(`https://raw.githubusercontent.com/JoeG592/pad-robin-action-kb/${commit}/${file}`);
-    }
-    parseCatalogPair(input);
-    const id = randomUUID();
-    const staging = join(root, `${id}.tmp`);
-    await this.#io.mkdir(staging);
-    const metadata = { power_fx: mode, commit, downloaded_at: checked_at,
-      checksums: { actions: hash(input.actions), types: hash(input.types) } };
-    try {
-      await this.#write(join(staging, 'actions.json'), input.actions);
-      await this.#write(join(staging, 'types.json'), input.types);
-      await this.#write(join(staging, 'metadata.json'), JSON.stringify(metadata));
-      await this.#io.rename(staging, join(root, id));
-    } finally {
-      for (const file of ['actions.json', 'types.json', 'metadata.json']) {
-        await this.#io.unlink(join(staging, file)).catch(() => {});
-      }
-      await this.#io.rmdir(staging).catch(() => {});
-    }
-    const generation = await this.#readGeneration(root, id, mode);
-    const manifest = { active: id, previous: state.generation?.id ?? null, checked_at };
-    await this.#activate(root, manifest);
-    // Cleanup is best-effort and only follows a successful activation. Orphans are retained.
-    if (manifest.previous) {
-      try {
-        await this.#readGeneration(root, manifest.active, mode);
-        await this.#readGeneration(root, manifest.previous, mode);
-        for (const obsolete of new Set([state.manifest?.active, state.manifest?.previous].filter(Boolean))) {
-          if (obsolete !== manifest.active && obsolete !== manifest.previous) await this.#removeGeneration(root, obsolete);
-        }
-      } catch { /* Retain extra files rather than risk the valid pair. */ }
-    }
-    return { generation, manifest, next_check: this.#now() + REFRESH_INTERVAL_MS, error: null };
+  /** Background checks continue even when no chat is active. */
+  start() {
+    if (this.#running) return;
+    this.#running = true;
+    const tick = async () => {
+      try { await this.checkForUpdates(); }
+      catch (error) { console.error('Catalog check unavailable:', error.message); }
+      if (!this.#running) return;
+      const remaining = this.#check ? Date.parse(this.#check.checked_at) + CHECK_INTERVAL_MS - this.#now() : CHECK_INTERVAL_MS;
+      this.#timer = setTimeout(tick, Math.max(1000, remaining));
+      this.#timer.unref();
+    };
+    void tick();
   }
 
-  async #get(mode) {
-    const root = join(this.#directory, mode);
-    await this.#io.mkdir(root, { recursive: true });
-    let state = this.#states.get(mode) ?? await this.#load(root, mode);
-    if (this.#now() >= state.next_check) {
-      try { state = await this.#refresh(root, mode, state); }
-      catch (error) {
-        state = { ...state, next_check: this.#now() + REFRESH_INTERVAL_MS,
-          error: `Catalog refresh failed: ${error.name === 'AbortError' ? 'request timed out' : error.message}` };
-      }
-    }
-    this.#states.set(mode, state);
-    if (!state.generation) throw new Error(state.error ?? 'No valid catalog available.');
-    return new CatalogIndex(state.generation.pair, {
-      commit: state.generation.metadata.commit, checked_at: state.manifest?.checked_at ?? null,
-      cache_status: state.error ? 'stale' : 'fresh', refresh_error: state.error
-    });
-  }
+  stop() { this.#running = false; clearTimeout(this.#timer); }
 }

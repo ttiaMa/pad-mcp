@@ -1,5 +1,15 @@
 # Catalog integration verification
 
+## Bundled catalogs and maintainer approval — 2026-10-17
+
+- `npm run check`: passed.
+- `npm test`: all 49 tests passed. Coverage includes first-use offline access to both real bundled editions, daily background checks without chat traffic, persisted success/failure backoff across restarts, pending update persistence, maintainer-only proposals and tools, explicit commit approval, immutable downloads, atomic activation of both editions, failed writes, and recovery of the previous snapshot or bundle.
+- The four upstream JSON files were retrieved from current `main` at `0c4ebca091d270f2ddaa70bbda32240251cf0850`. The commit and all four SHA-256 checksums were verified again after implementation. Git preserves their original bytes across platforms.
+- The MCP integration test exercises both roles over real local HTTP with deterministic upstream responses. Developers cannot invoke update tools even by name, and cannot see update proposals in their context.
+- Docker is unavailable on this host, so the updated image was not built. The Dockerfile now copies `catalogs/` explicitly. No PAD flow execution or deployment was performed.
+
+## Earlier integration verification — 2026-10-14
+
 Local verification completed on 2026-10-14. No production database changes, push or deployment were performed.
 
 ## Automated checks

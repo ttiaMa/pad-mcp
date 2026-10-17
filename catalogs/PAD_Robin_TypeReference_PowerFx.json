@@ -1,0 +1,350 @@
+{
+  "name": "PAD Robin Data Type Reference (Power Fx)",
+  "version": "1.0.0",
+  "date": "2026-10-13",
+  "description": "Power Fx edition of the Type Reference 3.1.1: how to write each parameter type in a Power Fx-enabled desktop flow. Text values are $fx'...'; everything else is written as in classic flows unless noted.",
+  "rules": [
+    "Text values use $fx'value'. Inside, \\' is an apostrophe and \\\\ one backslash; a bare or doubled apostrophe rejects the whole paste.",
+    "Expressions start with = inside $fx: $fx'=5', $fx'=Price * Qty', $fx'=\"a\" & \"b\"'.",
+    "Interpolation: $fx'Saved ${Count} files'. A literal ${ is $${. No %% escaping: $fx'100% done'.",
+    "Booleans may be bare True / False or $fx'=true'; numbers may be bare or $fx'=1'.",
+    "Handle/instance variables use bare variable names from previous action outputs. Names are case-sensitive.",
+    "Enum values use Module.EnumType.Value, unchanged from classic flows.",
+    "Lists are 1-based: $fx'=Index(L, 1)'; count with $fx'=CountRows(L)'. L[0] and L.Count paste but fail at run time.",
+    "Empty backticks `` mean the param needs a value filled in."
+  ],
+  "total_types": 44,
+  "types": [
+    {
+      "type": "String",
+      "category": "value",
+      "example": "$fx'example'",
+      "description": "Text value written $fx'...'",
+      "format": "$fx'your_value_here'"
+    },
+    {
+      "type": "Int32",
+      "category": "value",
+      "example": "1",
+      "description": "Integer number, bare value",
+      "format": "number or $fx'=expression'"
+    },
+    {
+      "type": "Decimal",
+      "category": "value",
+      "example": "1.0",
+      "description": "Decimal number, bare value",
+      "format": "number or $fx'=expression'"
+    },
+    {
+      "type": "Boolean",
+      "category": "value",
+      "example": "True",
+      "description": "True or False, bare value",
+      "format": "True or False, or $fx'=expression'"
+    },
+    {
+      "type": "DateTime",
+      "category": "value",
+      "example": "$fx'2025-01-01'",
+      "description": "Date/time as string",
+      "format": "$fx'YYYY-MM-DD'"
+    },
+    {
+      "type": "FileObject",
+      "category": "value",
+      "example": "$fx'C:\\temp\\test.xlsx'",
+      "description": "File path as string",
+      "format": "$fx'full_file_path'"
+    },
+    {
+      "type": "FolderObject",
+      "category": "value",
+      "example": "$fx'C:\\temp'",
+      "description": "Folder path as string",
+      "format": "$fx'full_folder_path'"
+    },
+    {
+      "type": "FileName",
+      "category": "value",
+      "example": "$fx'test.txt'",
+      "description": "File name as string",
+      "format": "$fx'filename.ext'"
+    },
+    {
+      "type": "Object",
+      "category": "value",
+      "example": "$fx'sample'",
+      "description": "Generic object, usually a string value",
+      "format": "$fx'value'"
+    },
+    {
+      "type": "EncryptableObject",
+      "category": "value",
+      "example": "$fx'password'",
+      "description": "Encrypted/sensitive string value",
+      "format": "$fx'value'"
+    },
+    {
+      "type": "Nullable`1",
+      "category": "value",
+      "example": "$fx'2025-01-01'",
+      "description": "Optional value, usually date or number as string",
+      "format": "$fx'value'"
+    },
+    {
+      "type": "CustomObject",
+      "category": "value",
+      "example": "MyCustomObject",
+      "description": "Custom object variable, or a Power Fx record literal $fx'={name: \"Joe\"}'; properties with $fx'=O.name'.",
+      "format": "bare_variable_name or $fx'={name: \"value\"}'"
+    },
+    {
+      "type": "ExcelInstanceHandle",
+      "category": "handle",
+      "example": "ExcelInstance",
+      "description": "Excel instance from LaunchExcel or Attach output",
+      "format": "bare_variable_name",
+      "created_by": "Excel.LaunchExcel.LaunchAndOpen or Excel.Attach"
+    },
+    {
+      "type": "WebBrowserInstanceHandle",
+      "category": "handle",
+      "example": "Browser",
+      "description": "Browser instance from LaunchEdge/Chrome/Firefox output",
+      "format": "bare_variable_name",
+      "created_by": "WebAutomation.LaunchEdge.LaunchEdge"
+    },
+    {
+      "type": "AccessInstanceHandle",
+      "category": "handle",
+      "example": "AccessInstance",
+      "description": "Access instance from LaunchAccess output",
+      "format": "bare_variable_name",
+      "created_by": "Access.LaunchAccess.LaunchExistingDbInAutomationMode"
+    },
+    {
+      "type": "WordInstanceHandle",
+      "category": "handle",
+      "example": "WordInstance",
+      "description": "Word instance from Word.Attach output",
+      "format": "bare_variable_name",
+      "created_by": "Word.Attach"
+    },
+    {
+      "type": "OutlookInstanceHandle",
+      "category": "handle",
+      "example": "OutlookInstance",
+      "description": "Outlook instance from Outlook.Launch output",
+      "format": "bare_variable_name",
+      "created_by": "Outlook.Launch"
+    },
+    {
+      "type": "CmdSessionHandle",
+      "category": "handle",
+      "example": "CmdSession",
+      "description": "CMD session from Cmd.Open output",
+      "format": "bare_variable_name",
+      "created_by": "Cmd.Open.Open"
+    },
+    {
+      "type": "SapInstanceHandle",
+      "category": "handle",
+      "example": "SapInstance",
+      "description": "SAP instance from SapLogin output",
+      "format": "bare_variable_name",
+      "created_by": "SAP.SapLogin.SapLogInOptionTerminate"
+    },
+    {
+      "type": "TerminalSessionHandle",
+      "category": "handle",
+      "example": "TerminalSession",
+      "description": "Terminal session from TerminalEmulation.OpenTerminalSession.* output",
+      "format": "bare_variable_name",
+      "created_by": "TerminalEmulation.OpenTerminalSession.OpenSession or TerminalEmulation.OpenTerminalSession.OpenSessionUsingReflection or TerminalEmulation.OpenTerminalSession.OpenSessionUsingReflectionProfile"
+    },
+    {
+      "type": "Ec2ClientObject",
+      "category": "handle",
+      "example": "Ec2Client",
+      "description": "AWS EC2 client from CreateEc2Session output",
+      "format": "bare_variable_name",
+      "created_by": "AWS.CreateEc2Session.CreateEc2SessionWithProfile"
+    },
+    {
+      "type": "AzureClient",
+      "category": "handle",
+      "example": "AzureClient",
+      "description": "Azure client from CreateSession output",
+      "format": "bare_variable_name",
+      "created_by": "Azure.CreateSession"
+    },
+    {
+      "type": "SqlConnectionHandle",
+      "category": "handle",
+      "example": "SQLConnection",
+      "description": "Database connection from Database.Connect.Connect (or .ConnectOracle) output. The bare id Database.Connect is rejected by PAD 2.72 as Unknown action.",
+      "format": "bare_variable_name",
+      "created_by": "Database.Connect.Connect or Database.Connect.ConnectOracle"
+    },
+    {
+      "type": "FtpConnectionBase",
+      "category": "handle",
+      "example": "SftpConnection",
+      "description": "FTP/FTPS/SFTP connection from FTP.OpenConnection or FTP.OpenSecureConnection.* output",
+      "format": "bare_variable_name",
+      "created_by": "FTP.OpenConnection or FTP.OpenSecureConnection.ConnectWithFtpsExplicit or FTP.OpenSecureConnection.ConnectWithFtpsImplicit or FTP.OpenSecureConnection.ConnectWithSftpPrivateKey or FTP.OpenSecureConnection.ConnectWithSftpPrivateKeyAndPassPhrase or FTP.OpenSecureConnection.ConnectWithSftpUsernameAndPassword"
+    },
+    {
+      "type": "ActiveDirectoryEntry",
+      "category": "handle",
+      "example": "ParentDirectoryEntry",
+      "description": "AD entry from ConnectToServer output",
+      "format": "bare_variable_name",
+      "created_by": "ActiveDirectory.ConnectToServer.ConnectToServer"
+    },
+    {
+      "type": "XmlNodeObject",
+      "category": "handle",
+      "example": "XmlDocument",
+      "description": "XML document from XML.ReadFromFile output",
+      "format": "bare_variable_name",
+      "created_by": "XML.ReadFromFile"
+    },
+    {
+      "type": "List`1",
+      "category": "collection",
+      "example": "$fx'=[\"a\", \"b\"]'",
+      "description": "List: a Power Fx table literal $fx'=[...]' or a list variable. Items with Index(L, 1) (1-based); count with CountRows(L).",
+      "format": "$fx'=[item, item]' or bare_variable_name"
+    },
+    {
+      "type": "DataTable",
+      "category": "collection",
+      "example": "DataTable",
+      "description": "DataTable variable (create with CreateNewDatatable or from action output)",
+      "format": "bare_variable_name"
+    },
+    {
+      "type": "BinaryObject",
+      "category": "collection",
+      "example": "BinaryData",
+      "description": "Binary data from ConvertToBinary output",
+      "format": "bare_variable_name"
+    },
+    {
+      "type": "WebControl",
+      "category": "selector",
+      "example": "$fx'body'",
+      "description": "Web UI element selector (from recording)",
+      "format": "$fx'selector'"
+    },
+    {
+      "type": "UIControl",
+      "category": "selector",
+      "example": "$fx'body'",
+      "description": "Desktop UI element selector (from recording)",
+      "format": "$fx'selector'"
+    },
+    {
+      "type": "_ENUM_RULE",
+      "category": "enum",
+      "example": "Module.EnumType.Value",
+      "description": "Enum values are pre-filled in templates. To change, use fully qualified Module.EnumType.Value format.",
+      "format": "Module.EnumType.Value"
+    },
+    {
+      "type": "WorkQueue",
+      "category": "special",
+      "example": "$fx'TestQueue'",
+      "description": "Work queue name as string",
+      "format": "$fx'queue_name'"
+    },
+    {
+      "type": "WorkQueueItem",
+      "category": "special",
+      "example": "NewWorkQueueItem",
+      "description": "Work queue item from EnqueueWorkQueueItem output",
+      "format": "bare_variable_name"
+    },
+    {
+      "type": "OutlookMailMessage",
+      "category": "special",
+      "example": "MailMessage",
+      "description": "Outlook mail message from RetrieveEmailMessages output",
+      "format": "bare_variable_name"
+    },
+    {
+      "type": "ExchangeConnectionHandle",
+      "category": "special",
+      "example": "ExchangeConnection",
+      "description": "Exchange connection from Exchange connection action",
+      "format": "bare_variable_name"
+    },
+    {
+      "type": "FtpFileObject",
+      "category": "special",
+      "example": "$fx'/test.txt'",
+      "description": "FTP file path as string",
+      "format": "$fx'/path/file'"
+    },
+    {
+      "type": "FtpFolderObject",
+      "category": "special",
+      "example": "$fx'/testdir'",
+      "description": "FTP folder path as string",
+      "format": "$fx'/path/dir'"
+    },
+    {
+      "type": "Image",
+      "category": "special",
+      "example": "ImageVar",
+      "description": "Image variable from screenshot or file",
+      "format": "bare_variable_name"
+    },
+    {
+      "type": "OCREngineObject",
+      "category": "handle",
+      "example": "OCREngine",
+      "description": "OCR engine from OCR.CreateTesseractEngine or OCR.CreateMODIEngine output; consumed by every OCR variant",
+      "format": "bare_variable_name",
+      "created_by": "OCR.CreateMODIEngine or OCR.CreateTesseractEngine.CreateCustomTesseractEngine or OCR.CreateTesseractEngine.CreateTesseractEngine"
+    },
+    {
+      "type": "Double",
+      "category": "value",
+      "example": "1.0",
+      "description": "Floating-point number, bare value (same rule as Decimal)",
+      "format": "number or $fx'=expression'"
+    },
+    {
+      "type": "CustomErrorCode",
+      "category": "value",
+      "example": "$fx'CustomError'",
+      "description": "Error code argument of FlowControl.ThrowCustomError; a text value written $fx'...'",
+      "format": "$fx'your_code_here'"
+    },
+    {
+      "type": "PowerPointInstanceHandle",
+      "category": "handle",
+      "example": "PowerPointInstance",
+      "description": "PowerPoint instance from LaunchPowerPoint or AttachToRunningPowerPoint output; consumed by every PowerPoint slide/read/write/save/close action (new module in PAD 2.72)",
+      "format": "bare_variable_name",
+      "created_by": "PowerPoint.LaunchPowerPoint.Launch or PowerPoint.LaunchPowerPoint.LaunchAndOpen or PowerPoint.AttachToRunningPowerPoint"
+    },
+    {
+      "type": "Int64",
+      "category": "value",
+      "example": "1",
+      "description": "Long integer, bare value (same rule as Int32); e.g. MouseAndKeyboard.SetKeyboardLayout KeyboardLayoutId",
+      "format": "number or $fx'=expression'"
+    }
+  ],
+  "edition": "power-fx",
+  "based_on": {
+    "name": "PAD Robin Data Type Reference",
+    "version": "3.1.1",
+    "file": "PAD_Robin_TypeReference.json"
+  },
+  "license": "CC BY 4.0"
+}

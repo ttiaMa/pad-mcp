@@ -1,0 +1,21 @@
+PAD Robin Action Knowledge Base
+Copyright (c) 2026 Joe Green
+
+The data files in this repository (PAD_Robin_ActionKB.json,
+PAD_Robin_TypeReference.json and their Power Fx editions
+PAD_Robin_ActionKB_PowerFx.json and PAD_Robin_TypeReference_PowerFx.json)
+and the accompanying documentation are
+licensed under the Creative Commons Attribution 4.0 International License
+(CC BY 4.0).
+
+You are free to share and adapt the material for any purpose, including
+commercially, provided you give appropriate credit, link to the license, and
+indicate if changes were made.
+
+Full license text: https://creativecommons.org/licenses/by/4.0/legalcode
+Human-readable summary: https://creativecommons.org/licenses/by/4.0/
+
+Power Automate, Power Automate Desktop and Robin are trademarks of Microsoft
+Corporation. This project is not affiliated with or endorsed by Microsoft.
+The action and parameter names recorded here describe the behaviour of the
+product as observed in PAD Designer.

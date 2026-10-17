@@ -2,7 +2,7 @@
 
 ## Architecture
 
-One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index and persistent development contexts. No AI provider or remote database is required. Catalog lookups use outbound HTTPS to `api.github.com` and `raw.githubusercontent.com`; approved snippet workflows and initial prompts work without GitHub. No credentials are sent to GitHub.
+One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index and persistent development contexts. No AI provider or remote database is required. Catalog lookups work offline. Daily update checks use outbound HTTPS to `api.github.com`; only Maintainer-approved updates download JSON from `raw.githubusercontent.com`. No credentials are sent to GitHub.
 
 Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8080. The container runs as the unprivileged `node` user. The image uses Node 24; `npm ci` installs the exact dependency versions in the lockfile. Validate base-image updates before deployment.
 
@@ -34,11 +34,13 @@ Schema 2 upgrades additively to schema 3 without changing snippet content, revis
 
 ### Catalog persistence and outages
 
-Both editions are downloaded lazily, when their tools are used. A shared cache checks `main` at most once every 12 hours per edition in a running process, resolving a commit and fetching both JSON files from that commit. It retains active and previous validated pairs with checksums. Failed downloads, invalid responses and remote deletions keep the last valid pair; startup validates disk data and can recover the previous pair. First use without a valid cache fails explicitly when GitHub is unavailable. Unauthenticated GitHub rate limits are handled as refresh failures.
+The application and Docker image bundle the Classic and Power Fx action/type JSON files. Both editions are available immediately, including offline. A shared background checker inspects upstream `main` once every 24 hours, persisting its cadence across restarts. Detection never activates an update. At the next Maintainer chat, the context response asks the agent to show the repository link and obtain approval; Developer chats have no update prompt or update tool.
 
-The cache directory must be writable by the service user and remain on persistent storage. Include it in volume backups. Do not delete it to resolve a temporary upstream outage. It uses one process per directory, 15-second per-request timeouts and a 10 MiB per-response bound. Interrupted activation may leave unreferenced generations, which are retained rather than guessed as active. See [cache details](catalog.md#stage-2-persistent-catalog-cache).
+After approval, all four files from the offered commit are validated and activated as one persistent snapshot. This overrides the bundled baseline, survives restarts/redeploys, and becomes the baseline for future checks. The current and previous approved snapshots are retained with checksums. Failed downloads or writes keep the current snapshot. Startup can recover the previous snapshot or the bundle. Older per-edition auto-refresh cache directories are retained but ignored; no database migration or deletion is needed.
 
-`/healthz` checks the knowledge database; it does not certify catalog freshness or PAD execution. Catalog responses report `cache_status`, commit, checked time and refresh errors. To verify a deployment, reconnect an MCP client, choose a mode, search an action and retrieve its exact record and a type. Then restart and repeat using the same context ID. Prompts are included by the Dockerfile's existing `COPY src` instruction.
+Keep `CATALOG_CACHE_PATH` writable by the service user and on persistent storage; include it in backups. Without writable storage, the bundle remains readable but updates cannot be activated and check cadence cannot survive restarts. Use one process per directory. Requests have 15-second timeouts and a 10 MiB response bound. See [cache details](catalog.md#stage-2-persistent-catalog-cache).
+
+`/healthz` checks the knowledge database; it does not certify catalog freshness or PAD execution. Catalog responses report `cache_status`, commit, checked time and refresh errors. To verify a deployment, reconnect an MCP client, choose a mode, search an action and retrieve its exact record and a type. Then restart and repeat using the same context ID. The Dockerfile includes prompts through `COPY src` and all bundled catalogs through `COPY catalogs`.
 
 ### Request boundary
 

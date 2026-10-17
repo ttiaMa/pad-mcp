@@ -15,6 +15,7 @@ import { createApp, validateConfig } from '../src/server.js';
 import { contentSchema } from '../src/schema.js';
 import { DatabaseSync } from 'node:sqlite';
 import { CatalogCache } from '../src/catalog-cache.js';
+import { documents, writeBundle } from '../test-support/catalog.js';
 
 const config = { maintainerToken: 'a'.repeat(48), developerToken: 'b'.repeat(48), publicUrl: 'http://localhost:8080' };
 const code = "\r\nSET Example TO $fx'=1'\r\n  # Unicode preservation fixture: café ☕\r\n";
@@ -22,7 +23,7 @@ const content = (extra = {}) => contentSchema.parse({ title: 'Pagination example
 const testContexts = new WeakMap();
 const testRoles = new WeakMap();
 
-async function setup(t, dependencies) {
+async function setup(t, dependencies = { catalogCache: { checkForUpdates: async () => ({ status: 'current' }) } }) {
   const store = new KnowledgeStore(':memory:');
   const listener = createApp(store, config, dependencies).listen(0, '127.0.0.1');
   await once(listener, 'listening');
@@ -463,25 +464,16 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
   const fetch = async url => {
     requests++;
     if (offline) throw new Error('Simulated outage');
-    if (url.includes('api.github.com')) return Response.json({ sha: 'a'.repeat(40) });
+    if (url.includes('api.github.com')) return Response.json({ sha: 'b'.repeat(40) });
     const mode = url.includes('_PowerFx') ? 'enabled' : 'disabled';
-    const base = { name: 'Synthetic', version: '1', license: 'CC BY 4.0',
-      ...(mode === 'enabled' ? { edition: 'power-fx' } : {}) };
-    if (url.includes('TypeReference')) return Response.json({ ...base, rules: [mode + ' rule'], types: [
-      { type: 'String', category: 'value', example: mode + ' text', description: 'Text' }
-    ] });
-    return Response.json({ ...base, pad_build: '2.73',
-      ...(mode === 'enabled' ? { power_fx: { run_time_traps: ['Synthetic runtime caveat'] } } : {}),
-      actions: Array.from({ length: 7 }, (_, i) => ({
-        actionId: `Text.Action${i}`, module: 'Text', kind: 'Action', selector: null,
-        template: 'Synthetic', golden_example: mode + ' example',
-        input_params: [{ name: 'Text', type: 'String' }], output_params: [],
-        constraints: {}, sibling_selectors: [], needs_ui_selector: false, validation: 'Synthetic only'
-      })) });
+    const docs = documents(mode, 'b');
+    return Response.json(url.includes('TypeReference') ? docs.types : docs.actions);
   };
-  const catalogCache = new CatalogCache({ directory, fetch, now: () => now });
+  const bundle_directory = join(directory, 'bundle');
+  await writeBundle(bundle_directory);
+  const catalogCache = new CatalogCache({ directory, bundle_directory, fetch, now: () => now });
   const { developer, maintainer, store } = await setup(t, { catalogCache });
-  assert.equal(requests, 0); // Initial prompt and snippet workflows never require GitHub.
+  assert.equal(requests, 1); // Maintainer context checks for updates, without downloading catalogs.
   const fx = testContexts.get(developer);
   const classic = (await call(developer, 'get_development_context', { power_fx: 'disabled' })).context_id;
   const fxPrompt = await call(developer, 'get_development_context', { context_id: fx });
@@ -503,33 +495,62 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
     ['search_type_reference', { context_id: fx, type_name: 'String', query: 'text' }],
     ['search_actions', { context_id: '00000000-0000-4000-8000-000000000000', query: 'text' }]
   ]) assert.equal((await developer.callTool({ name, arguments: args })).isError, true);
-  assert.equal(requests, 0);
+  assert.equal(requests, 1);
   const summaries = await Promise.all([developer, maintainer].map(client =>
     call(client, 'search_actions', { context_id: fx, module: 'Text' })));
-  assert.equal(requests, 3);
+  assert.equal(requests, 1);
   assert.equal(summaries[0].results.length, 5);
   assert.equal(summaries[0].truncated, true);
   assert.equal('golden_example' in summaries[0].results[0], false);
   for (const [id, mode] of [[fx, 'enabled'], [classic, 'disabled']]) {
     const exact = await call(developer, 'search_actions', { context_id: id, action_id: 'Text.Action0' });
-    assert.equal(exact.record.golden_example, mode + ' example');
+    assert.equal(exact.record.golden_example, mode + '-a');
     assert.equal(exact.source.power_fx, mode);
     assert.equal('development_prompt' in exact, false);
     assert.equal('power_fx' in exact.reference_rules, mode === 'enabled');
     const type = await call(developer, 'search_type_reference', { context_id: id, type_name: 'String' });
-    assert.equal(type.record.example, mode + ' text');
+    assert.equal(type.record.example, mode + '-a');
   }
-  offline = true; now += 12 * 3600000;
+  // Only maintainer contexts/status expose the proposal, including before mode selection.
+  const proposal = (await call(maintainer, 'get_development_context')).catalog_update;
+  assert.equal(proposal.status, 'update_available');
+  assert.equal(proposal.repository, 'https://github.com/JoeG592/pad-robin-action-kb');
+  assert.equal((await call(maintainer, 'get_development_context', {})).catalog_update.available_commit, 'b'.repeat(40));
+  const selection = await maintainer.callTool({ name: 'get_development_context', arguments: {} });
+  assert.equal(selection.structuredContent.status, 'selection_required');
+  assert.equal(selection.structuredContent.catalog_update.status, 'update_available');
+  assert.equal('catalog_update' in fxPrompt, false);
+  assert.equal('authoring_guidance' in fxPrompt, false);
+  const developerTools = (await developer.listTools()).tools.map(tool => tool.name);
+  for (const name of ['get_catalog_update_status', 'update_catalogs']) {
+    assert.equal(developerTools.includes(name), false);
+    assert.equal((await developer.callTool({ name, arguments: { expected_commit: 'b'.repeat(40), confirmed: true } })).isError, true);
+  }
+  for (const args of [{ expected_commit: 'b'.repeat(40) }, { expected_commit: 'b'.repeat(40), confirmed: false },
+    { expected_commit: 'c'.repeat(40), confirmed: true }]) {
+    assert.equal((await maintainer.callTool({ name: 'update_catalogs', arguments: args })).isError, true);
+  }
+  assert.equal(requests, 1);
+  const updated = await call(maintainer, 'update_catalogs', { expected_commit: proposal.available_commit, confirmed: true });
+  assert.equal(updated.status, 'current');
+  assert.equal(updated.baseline_commit, 'b'.repeat(40));
+  assert.equal(requests, 5);
+  for (const context_id of [fx, classic]) {
+    const active = await call(developer, 'search_actions', { context_id, action_id: 'Text.Action0' });
+    assert.equal(active.source.commit, 'b'.repeat(40));
+  }
+  offline = true; now += 24 * 3600000;
+  await call(maintainer, 'get_catalog_update_status');
   const stale = await call(developer, 'search_actions', { context_id: fx, action_id: 'Text.Action0' });
   assert.equal(stale.source.cache_status, 'stale');
   assert.ok(stale.source.refresh_error);
   assert.equal(store.export({}).entries.length, 0); // Catalog never becomes approved knowledge.
-  const restarted = new CatalogCache({ directory, fetch, now: () => now });
-  assert.equal((await restarted.get('enabled')).searchTypes({ type_name: 'String' }).record.example, 'enabled text');
+  const restarted = new CatalogCache({ directory, bundle_directory, fetch, now: () => now });
+  assert.equal((await restarted.get('enabled')).searchTypes({ type_name: 'String' }).record.example, 'enabled-b');
 });
 
 test('catalog failure is a tool error and leaves context and approved patterns usable', async t => {
-  const { developer, maintainer } = await setup(t, { catalogCache: { get: async () => { throw new Error('Unavailable'); } } });
+  const { developer, maintainer } = await setup(t, { catalogCache: { checkForUpdates: async () => ({ status: 'current' }), get: async () => { throw new Error('Unavailable'); } } });
   const result = await developer.callTool({ name: 'search_actions', arguments: { context_id: testContexts.get(developer), query: 'text' } });
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /Catalog unavailable/);
