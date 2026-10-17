@@ -18,6 +18,7 @@ The server asks the agent to load context first and retrieve relevant patterns b
 | `search_actions` | Both | Search the context's catalog by keywords/module; retrieve a complete action by exact `action_id` |
 | `search_type_reference` | Both | Search type summaries or retrieve formatting by exact `type_name` |
 | `export_knowledge` | Both | Export all published entries |
+| `get_usage_stats` | Maintainer | Read aggregate Developer usage by day, tool, mode or key; see [Usage statistics](usage-statistics.md) |
 | `get_catalog_update_status` | Maintainer | Read the daily check and pending catalog proposal without activating it |
 | `update_catalogs` | Maintainer | After explicit approval, replace both local editions with the exact offered commit |
 | `list_patterns` | Maintainer | List IDs and current revisions, including drafts |

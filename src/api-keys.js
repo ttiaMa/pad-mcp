@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 const hash = token => createHash('sha256').update(token).digest('hex');
-const columns = 'id, name, created_at, disabled_at';
+const columns = 'id, name, created_at, disabled_at, last_used_at';
 
 export class ApiKeys {
   constructor(db) { this.db = db; }

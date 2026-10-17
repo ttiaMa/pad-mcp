@@ -11,6 +11,8 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL to your HTTPS origin}
       MCP_MAINTAINER_TOKEN: ${MCP_MAINTAINER_TOKEN:?Set a random maintainer token of at least 32 characters}
       MCP_DEVELOPER_TOKEN: ${MCP_DEVELOPER_TOKEN:-}
+      USAGE_STATS_ENABLED: ${USAGE_STATS_ENABLED:-true}
+      USAGE_RETENTION_DAYS: ${USAGE_RETENTION_DAYS:-90}
     expose:
       - "8080"
     volumes:

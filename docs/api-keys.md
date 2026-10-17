@@ -26,6 +26,8 @@ npm run keys -- list
 
 The list includes each key's ID, name and creation date. Tokens and hashes are never included. Deleted keys no longer appear.
 
+`last_used_at` shows the most recent recorded tool call, or `null` if none has been recorded. See [Developer usage statistics](usage-statistics.md) for aggregate reports and retention settings.
+
 For compatibility with earlier versions, the output still includes `disabled_at`: it is `null` for active keys. Keys disabled with an older version remain unusable and can be removed with `delete`.
 
 ## Delete a key
@@ -39,6 +41,8 @@ Replace `KEY_ID` with the ID returned by the create or list command.
 The key is rejected from the next request onward. No server restart is needed, and other keys continue to work. A request already accepted may finish.
 
 Deleting a key removes its record, including its hash and metadata, from the live database. There is no undo or recovery command; create a new key if the person needs access again. Deleting an unknown or already deleted ID returns an error.
+
+Deleting a key also removes its usage counters.
 
 ## Use from Coolify or Docker
 

@@ -74,10 +74,10 @@ test('v3 migration preserves knowledge and immutable contexts', t => {
   t.after(() => { store.close(); rmSync(dirname(path), { recursive: true, force: true }); });
   const context = store.developmentContext({ power_fx: 'enabled' });
   const before = store.export({});
-  store.db.exec('DROP TABLE api_keys; DROP TABLE api_keys_bootstrap; PRAGMA user_version = 3;');
+  store.db.exec('DROP TABLE usage_daily; DROP TABLE api_keys; DROP TABLE api_keys_bootstrap; PRAGMA user_version = 3;');
   store.close();
   store = new KnowledgeStore(path);
-  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 4);
+  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 5);
   assert.deepEqual(store.export({}), before);
   assert.deepEqual(store.developmentContext({ context_id: context.context_id }), context);
 });

@@ -32,9 +32,9 @@ export class KnowledgeStore {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (![0, 2, 3, 4].includes(version)) {
+    if (![0, 2, 3, 4, 5].includes(version)) {
       this.db.close();
-      throw new Error(`Unsupported database schema ${version}; expected 2, 3 or 4.`);
+      throw new Error(`Unsupported database schema ${version}; expected 2, 3, 4 or 5.`);
     }
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
     if (version === 0) this.db.exec(`
@@ -86,6 +86,28 @@ export class KnowledgeStore {
       );
       CREATE TABLE api_keys_bootstrap (id INTEGER PRIMARY KEY CHECK (id = 1));
       PRAGMA user_version = 4;
+      COMMIT;
+    `); } catch (error) {
+      try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
+      this.db.close();
+      throw error;
+    }
+    if (version < 5) try { this.db.exec(`
+      BEGIN IMMEDIATE;
+      ALTER TABLE api_keys ADD COLUMN last_used_at TEXT;
+      CREATE TABLE usage_daily (
+        day TEXT NOT NULL,
+        key_id TEXT NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+        tool TEXT NOT NULL,
+        mode TEXT NOT NULL CHECK (mode IN ('classic', 'power_fx', 'not_applicable')),
+        calls INTEGER NOT NULL,
+        successes INTEGER NOT NULL,
+        errors INTEGER NOT NULL,
+        empty_results INTEGER NOT NULL,
+        PRIMARY KEY (day, key_id, tool, mode)
+      );
+      CREATE INDEX usage_daily_key ON usage_daily(key_id);
+      PRAGMA user_version = 5;
       COMMIT;
     `); } catch (error) {
       try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }

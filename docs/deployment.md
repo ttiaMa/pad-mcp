@@ -12,6 +12,8 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 | --- | --- |
 | `MCP_MAINTAINER_TOKEN` | Required random secret, at least 32 characters; full knowledge-management access |
 | `MCP_DEVELOPER_TOKEN` | Optional migration input: imports the old shared Developer token once as `legacy-developer`. Manage new keys through the CLI; see [API key management](api-keys.md) |
+| `USAGE_STATS_ENABLED` | `true` by default; set to `false` to stop collecting Developer usage statistics |
+| `USAGE_RETENTION_DAYS` | Retain 90 UTC calendar dates by default; accepts 1–365. See [Usage statistics](usage-statistics.md) |
 | `PUBLIC_URL` | External origin such as `https://mcp.example.com`, without a path |
 | `HOST` | Local default `127.0.0.1`; container uses `0.0.0.0` |
 | `PORT` | Application port; Compose uses 8080 |
@@ -30,7 +32,7 @@ To distribute an edited JSON export as the starting collection for a new install
 
 The database is stored on the `knowledge_data` volume at `/app/data/knowledge.sqlite`. Keep that volume attached across redeployments.
 
-Schemas 2 and 3 upgrade additively to schema 4, which adds Developer API keys and a one-time legacy-token import marker. Snippet content, revision history, existing development contexts and the seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only SQLite schema 2 or 3 cannot open schema 4: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
+Schemas 2, 3 and 4 upgrade additively to schema 5, which adds daily Developer usage counters and a last-use timestamp on API keys. Earlier migrations add development contexts, Developer keys and the one-time legacy-token import marker as needed. Snippet content, revision history, existing development contexts, keys and the seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only schemas 2–4 cannot open schema 5: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys or usage statistics. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
 
 ### Catalog persistence and outages
 
@@ -60,7 +62,7 @@ The local override publishes port 8080 on loopback only. On Coolify, use `compos
 
 ## Back up and restore
 
-JSON export includes only currently published revisions, without drafts, history or API keys. For a full backup:
+JSON export includes only currently published revisions, without drafts, history, API keys or usage statistics. For a full backup:
 
 1. Stop the service and wait for the process to exit.
 2. Copy or snapshot the `knowledge_data` volume, including any SQLite `-wal` and `-shm` files present.
