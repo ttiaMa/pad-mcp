@@ -11,7 +11,6 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 | Variable | Purpose |
 | --- | --- |
 | `MCP_MAINTAINER_TOKEN` | Required random secret, at least 32 characters; full knowledge-management access |
-| `MCP_DEVELOPER_TOKEN` | Optional migration input: imports the old shared Developer token once as `legacy-developer`. Manage new keys through the CLI; see [API key management](api-keys.md) |
 | `USAGE_STATS_ENABLED` | `true` by default; set to `false` to stop collecting Developer usage statistics |
 | `USAGE_RETENTION_DAYS` | Retain 90 UTC calendar dates by default; accepts 1–365. See [Usage statistics](usage-statistics.md) |
 | `PUBLIC_URL` | External origin such as `https://mcp.example.com`, without a path |
@@ -20,7 +19,7 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 | `DATABASE_PATH` | Local `./data/knowledge.sqlite`; container `/app/data/knowledge.sqlite` |
 | `CATALOG_CACHE_PATH` | Optional; defaults to `catalog-cache` beside the database. Compose uses `/app/data/catalog-cache` in the same persistent volume |
 
-The application rejects missing or short Maintainer credentials, short legacy Developer credentials when supplied, and equal legacy Developer/Maintainer tokens. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer key cannot mutate knowledge, but can create development contexts.
+The application rejects missing Maintainer credentials or values shorter than 32 characters. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer key cannot mutate knowledge, but can create development contexts.
 
 ### Database initialization
 
@@ -32,7 +31,7 @@ To distribute an edited JSON export as the starting collection for a new install
 
 The database is stored on the `knowledge_data` volume at `/app/data/knowledge.sqlite`. Keep that volume attached across redeployments.
 
-Schemas 2, 3 and 4 upgrade additively to schema 5, which adds daily Developer usage counters and a last-use timestamp on API keys. Earlier migrations add development contexts, Developer keys and the one-time legacy-token import marker as needed. Snippet content, revision history, existing development contexts, keys and the seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only schemas 2–4 cannot open schema 5: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys or usage statistics. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
+Schemas 2, 3 and 4 upgrade additively to schema 5, which adds daily Developer usage counters and a last-use timestamp on API keys. Earlier migrations add development contexts and Developer keys as needed. Snippet content, revision history, existing development contexts, keys and the seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only schemas 2–4 cannot open schema 5: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys or usage statistics. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
 
 ### Catalog persistence and outages
 
@@ -48,7 +47,7 @@ Keep `CATALOG_CACHE_PATH` writable by the service user and on persistent storage
 
 Unknown Host headers and Origins different from `PUBLIC_URL` are rejected. Non-browser MCP clients can omit Origin. Update `PUBLIC_URL` when changing the domain. Do not enable broad CORS to bypass these checks.
 
-The Maintainer authenticates with `MCP_MAINTAINER_TOKEN`. Developers authenticate with individual keys created from the server terminal; SQLite stores only their hashes and metadata. Deleting a Developer key rejects subsequent requests without restarting the server. See [API key management](api-keys.md) for commands, rotation and migration from the old shared token. No SQL port needs to be exposed.
+The Maintainer authenticates with `MCP_MAINTAINER_TOKEN`. Developers authenticate with individual keys created from the server terminal; SQLite stores only their hashes and metadata. Deleting a Developer key rejects subsequent requests without restarting the server. See [API key management](api-keys.md) for commands and key rotation. No SQL port needs to be exposed.
 
 ## Local Docker Compose
 

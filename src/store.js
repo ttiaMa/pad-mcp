@@ -84,7 +84,6 @@ export class KnowledgeStore {
         created_at TEXT NOT NULL,
         disabled_at TEXT
       );
-      CREATE TABLE api_keys_bootstrap (id INTEGER PRIMARY KEY CHECK (id = 1));
       PRAGMA user_version = 4;
       COMMIT;
     `); } catch (error) {

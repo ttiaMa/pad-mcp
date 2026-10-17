@@ -160,8 +160,6 @@ export function validateConfig(config) {
   if (config.usageEnabled !== undefined && typeof config.usageEnabled !== 'boolean') throw new Error('USAGE_STATS_ENABLED must be true or false.');
   if (config.usageRetentionDays !== undefined && (!Number.isInteger(config.usageRetentionDays) || config.usageRetentionDays < 1 || config.usageRetentionDays > 365)) throw new Error('USAGE_RETENTION_DAYS must be an integer from 1 to 365.');
   if (!config.maintainerToken || config.maintainerToken.length < 32) throw new Error('MCP_MAINTAINER_TOKEN must contain at least 32 characters.');
-  if (config.developerToken && config.developerToken.length < 32) throw new Error('MCP_DEVELOPER_TOKEN must contain at least 32 characters.');
-  if (config.developerToken === config.maintainerToken) throw new Error('Maintainer and developer tokens must differ.');
   const url = new URL(config.publicUrl);
   if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
     throw new Error('PUBLIC_URL must be an HTTP(S) origin without credentials or path.');
@@ -183,7 +181,6 @@ export function createApp(store, config, { catalogCache = new CatalogCache({ dir
   const digest = value => createHash('sha256').update(value).digest();
   const maintainerDigest = digest(config.maintainerToken);
   const apiKeys = new ApiKeys(store.db);
-  apiKeys.importLegacy(config.developerToken);
 
   app.get('/healthz', (_req, res) => {
     try { store.health(); res.json({ status: 'ok' }); }

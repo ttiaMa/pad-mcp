@@ -76,13 +76,3 @@ Include the database in your backups. Knowledge JSON exports do not include API 
 Deletion does not alter existing backups. Restoring an older database backup can restore keys that were subsequently deleted; delete those keys again before reopening access.
 
 To replace a lost or exposed Developer token, delete its key and create a new one. To rotate the Maintainer token, update `MCP_MAINTAINER_TOKEN`, redeploy and update your Maintainer clients.
-
-## Migrate from the shared Developer token
-
-If `MCP_DEVELOPER_TOKEN` is configured, the server imports it into the database once, naming it `legacy-developer`. Existing clients can continue using it.
-
-After the first successful startup with the updated version, you can remove `MCP_DEVELOPER_TOKEN` from the deployment configuration. The imported key remains in the database.
-
-Deleting the imported key is permanent: restarting the server or leaving the old environment variable configured will not reactivate it. After the import, changing that variable does not create another key. Use the terminal commands to manage Developer access.
-
-For individual access, create a key for each person, distribute the new tokens, then delete `legacy-developer` when everyone has switched.

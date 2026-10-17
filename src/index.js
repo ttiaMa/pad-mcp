@@ -10,7 +10,6 @@ const databasePath = process.env.DATABASE_PATH ?? './data/knowledge.sqlite';
 const config = {
   catalogCachePath: process.env.CATALOG_CACHE_PATH || join(dirname(databasePath), 'catalog-cache'),
   maintainerToken: process.env.MCP_MAINTAINER_TOKEN,
-  developerToken: process.env.MCP_DEVELOPER_TOKEN || undefined,
   usageEnabled: process.env.USAGE_STATS_ENABLED === undefined ? true
     : process.env.USAGE_STATS_ENABLED === 'true' ? true : process.env.USAGE_STATS_ENABLED === 'false' ? false : null,
   usageRetentionDays: Number(process.env.USAGE_RETENTION_DAYS ?? 90),

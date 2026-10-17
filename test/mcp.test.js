@@ -11,13 +11,14 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { KnowledgeStore } from '../src/store.js';
+import { ApiKeys } from '../src/api-keys.js';
 import { createApp, validateConfig } from '../src/server.js';
 import { contentSchema } from '../src/schema.js';
 import { DatabaseSync } from 'node:sqlite';
 import { CatalogCache } from '../src/catalog-cache.js';
 import { documents, writeBundle } from './fixtures/catalog.js';
 
-const config = { maintainerToken: 'a'.repeat(48), developerToken: 'b'.repeat(48), publicUrl: 'http://localhost:8080' };
+const config = { maintainerToken: 'a'.repeat(48), publicUrl: 'http://localhost:8080' };
 const code = "\r\nSET Example TO $fx'=1'\r\n  # Unicode preservation fixture: café ☕\r\n";
 const content = (extra = {}) => contentSchema.parse({ title: 'Pagination example', problem: 'Divide a list into batches', robin_code: code, tags: ['pagination'], power_fx: 'enabled', ...extra });
 const testContexts = new WeakMap();
@@ -25,6 +26,7 @@ const testRoles = new WeakMap();
 
 async function setup(t, dependencies = { catalogCache: { checkForUpdates: async () => ({ status: 'current' }) } }) {
   const store = new KnowledgeStore(':memory:');
+  const developerToken = new ApiKeys(store.db).create('Test Developer').token;
   const listener = createApp(store, config, dependencies).listen(0, '127.0.0.1');
   await once(listener, 'listening');
   const url = `http://127.0.0.1:${listener.address().port}`;
@@ -46,7 +48,7 @@ async function setup(t, dependencies = { catalogCache: { checkForUpdates: async 
     testRoles.set(client, token === config.maintainerToken ? 'maintainer' : 'developer');
     return client;
   }
-  return { store, url, maintainer: await connect(config.maintainerToken), developer: await connect(config.developerToken) };
+  return { store, url, maintainer: await connect(config.maintainerToken), developer: await connect(developerToken) };
 }
 
 async function call(client, name, args = {}) {
@@ -258,9 +260,8 @@ test('SQLite re-open preserves drafts, original bytes, approved revision and ful
   }
 });
 
-test('configuration fails closed with missing/weak/equal tokens or a non-HTTPS external origin', () => {
+test('configuration fails closed with missing/weak Maintainer tokens or a non-HTTPS external origin', () => {
   assert.throws(() => validateConfig({ ...config, maintainerToken: '' }), /MCP_MAINTAINER_TOKEN/);
-  assert.throws(() => validateConfig({ ...config, developerToken: config.maintainerToken }), /differ/);
   assert.throws(() => validateConfig({ ...config, publicUrl: 'http://example.com' }), /HTTPS/);
   assert.throws(() => validateConfig({ ...config, publicUrl: 'https://example.com/mcp' }), /origin/);
 });

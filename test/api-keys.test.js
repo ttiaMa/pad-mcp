@@ -48,33 +48,13 @@ test('keys persist as hashes, have no expiry, and deletion removes the record pe
   assert.equal(keys.list().length, 1);
 });
 
-test('legacy developer token imports once and cannot be resurrected by restart or env changes', t => {
-  const path = fixture();
-  let store = new KnowledgeStore(path);
-  t.after(() => { store.close(); rmSync(dirname(path), { recursive: true, force: true }); });
-  let keys = new ApiKeys(store.db);
-  keys.importLegacy(undefined);
-  const legacy = 'd'.repeat(48);
-  keys.importLegacy(legacy);
-  const key = keys.authenticate(legacy);
-  keys.delete(key.id);
-  store.close();
-  store = new KnowledgeStore(path);
-  keys = new ApiKeys(store.db);
-  keys.importLegacy(legacy);
-  keys.importLegacy('e'.repeat(48));
-  assert.equal(keys.authenticate(legacy), null);
-  assert.equal(keys.authenticate('e'.repeat(48)), null);
-  assert.equal(keys.list().length, 0);
-});
-
 test('v3 migration preserves knowledge and immutable contexts', t => {
   const path = fixture();
   let store = new KnowledgeStore(path);
   t.after(() => { store.close(); rmSync(dirname(path), { recursive: true, force: true }); });
   const context = store.developmentContext({ power_fx: 'enabled' });
   const before = store.export({});
-  store.db.exec('DROP TABLE usage_daily; DROP TABLE api_keys; DROP TABLE api_keys_bootstrap; PRAGMA user_version = 3;');
+  store.db.exec('DROP TABLE usage_daily; DROP TABLE api_keys; PRAGMA user_version = 3;');
   store.close();
   store = new KnowledgeStore(path);
   assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 5);

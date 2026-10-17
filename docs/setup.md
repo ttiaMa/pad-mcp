@@ -28,7 +28,7 @@ To give a Developer access, open another terminal in the project directory and c
 npm run keys -- create --name "Roby"
 ```
 
-Copy the returned token and share it privately. See [API key management](api-keys.md) for listing, deleting and migrating keys.
+Copy the returned token and share it privately. See [API key management](api-keys.md) for listing and deleting keys.
 
 ## Deploy on Coolify
 

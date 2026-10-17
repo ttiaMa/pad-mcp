@@ -23,7 +23,7 @@ test('additive v2 migration preserves every knowledge row, bootstrap marker and 
     content: contentSchema.parse({ title: 'Draft', problem: 'Unclassified', robin_code: 'unchanged' }) });
   bootstrapKnowledge(store);
   // Recreate the exact pre-context v2 schema, including existing knowledge and bootstrap state.
-  store.db.exec('DROP TABLE usage_daily; DROP TABLE api_keys; DROP TABLE api_keys_bootstrap; DROP TRIGGER immutable_development_context; DROP TABLE development_contexts; PRAGMA user_version = 2;');
+  store.db.exec('DROP TABLE usage_daily; DROP TABLE api_keys; DROP TRIGGER immutable_development_context; DROP TABLE development_contexts; PRAGMA user_version = 2;');
   const queries = ['SELECT * FROM patterns ORDER BY id', 'SELECT * FROM revisions ORDER BY id, revision',
     'SELECT * FROM knowledge_fts ORDER BY id', 'SELECT * FROM knowledge_bootstrap'];
   const before = queries.map(query => store.db.prepare(query).all());

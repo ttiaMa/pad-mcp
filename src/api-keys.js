@@ -17,23 +17,6 @@ export class ApiKeys {
     return { ...key, token };
   }
 
-  // Import once: a stale environment value must never resurrect a deleted key.
-  importLegacy(token) {
-    if (!token) return;
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
-      if (!this.db.prepare('SELECT 1 FROM api_keys_bootstrap WHERE id = 1').get()) {
-        this.db.prepare('INSERT INTO api_keys (id, name, token_hash, created_at) VALUES (?, ?, ?, ?)')
-          .run(randomUUID(), 'legacy-developer', hash(token), new Date().toISOString());
-        this.db.prepare('INSERT INTO api_keys_bootstrap (id) VALUES (1)').run();
-      }
-      this.db.exec('COMMIT');
-    } catch (error) {
-      this.db.exec('ROLLBACK');
-      throw error;
-    }
-  }
-
   list() { return this.db.prepare(`SELECT ${columns} FROM api_keys ORDER BY created_at, id`).all(); }
 
   delete(id) {
