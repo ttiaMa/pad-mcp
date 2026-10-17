@@ -21,6 +21,27 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 
 The application rejects missing Maintainer credentials or values shorter than 32 characters. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer key cannot mutate knowledge, but can create development contexts.
 
+### Where environment values come from
+
+`.env.example` is a local setup template, not a file loaded by the application. The server and CLI commands optionally read `.env` in the working directory. Missing `.env` files are silent; existing process variables take precedence. Docker excludes `.env` files from the image, so Coolify normally supplies configuration directly to the container.
+
+| Variable | Local `.env.example` | Bundled Docker Compose |
+| --- | --- | --- |
+| `MCP_MAINTAINER_TOKEN` | Empty; set your secret | Required; supply through Coolify or Compose |
+| `PUBLIC_URL` | `http://localhost:8080` | Required; set the deployment's HTTPS origin |
+| `HOST` | `127.0.0.1` | Fixed at `0.0.0.0` |
+| `PORT` | `8080` | Fixed at `8080` |
+| `DATABASE_PATH` | `./data/knowledge.sqlite` | Fixed at `/app/data/knowledge.sqlite` |
+| `CATALOG_CACHE_PATH` | Empty; defaults beside the database | Fixed at `/app/data/catalog-cache` |
+| `USAGE_STATS_ENABLED` | `true` | Configurable; defaults to `true` |
+| `USAGE_RETENTION_DAYS` | `90` | Configurable; defaults to `90` |
+
+The Dockerfile additionally sets `NODE_ENV=production`, along with the container's host, port and database path. The application does not use `NODE_ENV` to select Coolify environment groups. `MCP_URL` is an optional endpoint override for the transfer CLI; `PAD_MCP_TOKEN` belongs to client configuration, not the server.
+
+Coolify has separate [Production and Preview variable groups](https://coolify.io/docs/applications/configuration/environment-variables). Production is the main deployment; Preview is for pull-request deployments. The Compose references expose `MCP_MAINTAINER_TOKEN`, `PUBLIC_URL`, `USAGE_STATS_ENABLED` and `USAGE_RETENTION_DAYS` as configurable values. Fixed Compose values are not overridden merely by adding similarly named entries to the dashboard.
+
+Review both groups when removing an obsolete setting from an existing application. Developer authentication uses database keys only; there is no Developer-token environment setting. Use separate Maintainer credentials and the correct `PUBLIC_URL` for a preview, then redeploy the affected environment after saving changes.
+
 ### Database initialization
 
 On first startup, pad-mcp creates the SQLite database with patterns, revisions and the FTS5 search index. Subsequent starts reopen the same database without resetting its content.
@@ -31,7 +52,7 @@ To distribute an edited JSON export as the starting collection for a new install
 
 The database is stored on the `knowledge_data` volume at `/app/data/knowledge.sqlite`. Keep that volume attached across redeployments.
 
-Schemas 2, 3 and 4 upgrade additively to schema 5, which adds daily Developer usage counters and a last-use timestamp on API keys. Earlier migrations add development contexts and Developer keys as needed. Snippet content, revision history, existing development contexts, keys and the seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only schemas 2–4 cannot open schema 5: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys or usage statistics. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
+Schemas 2–5 upgrade to schema 6. Earlier migrations add development contexts, Developer keys, daily usage counters and last-use timestamps as needed. Schema 6 removes the obsolete key status column and import marker. Previously disabled keys and their counters are deleted so they cannot regain access; active keys, their statistics, snippets, revisions, contexts and the knowledge seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only schemas 2–5 cannot open schema 6: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys or usage statistics. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
 
 ### Catalog persistence and outages
 

@@ -28,8 +28,6 @@ The list includes each key's ID, name and creation date. Tokens and hashes are n
 
 `last_used_at` shows the most recent recorded tool call, or `null` if none has been recorded. See [Developer usage statistics](usage-statistics.md) for aggregate reports and retention settings.
 
-For compatibility with earlier versions, the output still includes `disabled_at`: it is `null` for active keys. Keys disabled with an older version remain unusable and can be removed with `delete`.
-
 ## Delete a key
 
 ```sh
@@ -66,6 +64,8 @@ docker compose exec pad-mcp npm run keys -- delete --id KEY_ID
 ```
 
 The commands use `DATABASE_PATH`, just like the server. The bundled container configuration points both to `/app/data/knowledge.sqlite`.
+
+The CLI uses the container's environment directly; a `.env` file is not required. For local development, it reads `.env` when present without overriding existing environment variables. See [environment defaults](deployment.md#where-environment-values-come-from).
 
 ## Storage and backups
 

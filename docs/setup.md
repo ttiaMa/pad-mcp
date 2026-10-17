@@ -43,6 +43,8 @@ Docker Compose defines the application, environment, health check and persistent
 
 `PUBLIC_URL` must not contain `/mcp` or the internal port in production. The `knowledge_data` volume is mounted at `/app/data` and survives normal redeployments. Run **one instance** and back up the volume separately.
 
+See [environment defaults](deployment.md#where-environment-values-come-from) for the local template, container settings and Coolify Production/Preview groups. Developer keys are created through the CLI and do not require a server environment variable.
+
 See [Deployment](deployment.md) for configuration and backups, and [Usage](usage.md) for client setup, tools and data formats.
 
 ## Connect Codex or Claude Code

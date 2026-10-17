@@ -225,7 +225,7 @@ test('development content stays lean through MCP schemas, storage, retrieval and
 test('unsupported database formats are rejected without changing the file', t => {
   const dir = mkdtempSync(join(tmpdir(), 'pad-mcp-format-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  for (const version of [1, 6]) {
+  for (const version of [1, 7]) {
     const file = join(dir, `version-${version}.sqlite`);
     const db = new DatabaseSync(file);
     db.exec(`CREATE TABLE sample_content (content TEXT); PRAGMA user_version = ${version};`);
@@ -243,7 +243,7 @@ test('SQLite re-open preserves drafts, original bytes, approved revision and ful
   try {
     const file = join(dir, 'knowledge.sqlite');
     store = new KnowledgeStore(file);
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 5);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 6);
     assert.deepEqual(store.db.prepare('PRAGMA table_info(patterns)').all().map(column => column.name), ['id', 'latest_revision', 'published_revision']);
     assert.deepEqual(store.export({}), { schema_version: 2, entries: [], next_offset: null });
     store.saveDraft({ id: 'persisted', expected_revision: 0, content: content() });

@@ -1,10 +1,12 @@
 import { parseArgs } from 'node:util';
 import { KnowledgeStore } from '../src/store.js';
 import { ApiKeys } from '../src/api-keys.js';
+import { loadLocalEnv } from '../src/env.js';
 
 const usage = 'Usage: npm run keys -- create --name "Name" | list | delete --id <ID>';
 let store;
 try {
+  loadLocalEnv();
   const { values, positionals } = parseArgs({
     allowPositionals: true,
     options: { name: { type: 'string' }, id: { type: 'string' }, help: { type: 'boolean' } }

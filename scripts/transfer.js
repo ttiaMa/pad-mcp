@@ -3,6 +3,9 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { z } from 'zod';
 import { packageEntrySchema } from '../src/schema.js';
+import { loadLocalEnv } from '../src/env.js';
+
+loadLocalEnv();
 
 const [operation, file, ...flags] = process.argv.slice(2);
 if (!['export', 'import'].includes(operation) || !file || flags.length) {

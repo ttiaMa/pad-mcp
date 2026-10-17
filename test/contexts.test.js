@@ -30,7 +30,7 @@ test('additive v2 migration preserves every knowledge row, bootstrap marker and 
   const exported = store.export({});
   store.close();
   store = new KnowledgeStore(path);
-  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 5);
+  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 6);
   assert.deepEqual(queries.map(query => store.db.prepare(query).all()), before);
   assert.deepEqual(store.export({}), exported);
   assert.equal(bootstrapKnowledge(store).status, 'already_initialized');

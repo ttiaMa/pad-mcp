@@ -32,9 +32,9 @@ export class KnowledgeStore {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (![0, 2, 3, 4, 5].includes(version)) {
+    if (![0, 2, 3, 4, 5, 6].includes(version)) {
       this.db.close();
-      throw new Error(`Unsupported database schema ${version}; expected 2, 3, 4 or 5.`);
+      throw new Error(`Unsupported database schema ${version}; expected 2, 3, 4, 5 or 6.`);
     }
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
     if (version === 0) this.db.exec(`
@@ -81,8 +81,7 @@ export class KnowledgeStore {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         token_hash TEXT NOT NULL UNIQUE,
-        created_at TEXT NOT NULL,
-        disabled_at TEXT
+        created_at TEXT NOT NULL
       );
       PRAGMA user_version = 4;
       COMMIT;
@@ -109,6 +108,18 @@ export class KnowledgeStore {
       PRAGMA user_version = 5;
       COMMIT;
     `); } catch (error) {
+      try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
+      this.db.close();
+      throw error;
+    }
+    if (version < 6) try {
+      this.db.exec('BEGIN IMMEDIATE');
+      // Remove the obsolete status without reactivating previously revoked access.
+      if (this.db.prepare('PRAGMA table_info(api_keys)').all().some(column => column.name === 'disabled_at')) {
+        this.db.exec('DELETE FROM api_keys WHERE disabled_at IS NOT NULL; ALTER TABLE api_keys DROP COLUMN disabled_at;');
+      }
+      this.db.exec('DROP TABLE IF EXISTS api_keys_bootstrap; PRAGMA user_version = 6; COMMIT;');
+    } catch (error) {
       try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
       this.db.close();
       throw error;

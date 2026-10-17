@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 const hash = token => createHash('sha256').update(token).digest('hex');
-const columns = 'id, name, created_at, disabled_at, last_used_at';
+const columns = 'id, name, created_at, last_used_at';
 
 export class ApiKeys {
   constructor(db) { this.db = db; }
@@ -11,7 +11,7 @@ export class ApiKeys {
       throw new Error('Name must contain 1-100 characters without control characters.');
     }
     const token = `pad_dev_${randomBytes(32).toString('hex')}`;
-    const key = { id: randomUUID(), name: name.trim(), created_at: new Date().toISOString(), disabled_at: null };
+    const key = { id: randomUUID(), name: name.trim(), created_at: new Date().toISOString(), last_used_at: null };
     this.db.prepare('INSERT INTO api_keys (id, name, token_hash, created_at) VALUES (?, ?, ?, ?)')
       .run(key.id, key.name, hash(token), key.created_at);
     return { ...key, token };
@@ -26,8 +26,7 @@ export class ApiKeys {
   }
 
   authenticate(token) {
-    // Preserve revocations made by older releases; those records can also be deleted.
-    return this.db.prepare(`SELECT ${columns} FROM api_keys WHERE token_hash = ? AND disabled_at IS NULL`)
+    return this.db.prepare(`SELECT ${columns} FROM api_keys WHERE token_hash = ?`)
       .get(hash(token)) ?? null;
   }
 }

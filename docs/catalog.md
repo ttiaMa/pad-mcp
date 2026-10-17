@@ -39,7 +39,7 @@ Network requests use fixed GitHub endpoints, no credentials, rejected redirects,
 
 ## Stage 3: fixed-mode development contexts
 
-The existing MCP knowledge tools now use persistent immutable contexts and mode filters. SQLite migrates additively from schema 2 to 3; knowledge exports remain version 2. New publication requires explicit mode classification. See [Initial context](usage.md#initial-context) for the changed tool contract and client reconnection requirements. No live database reset or reimport is required.
+MCP knowledge tools use persistent immutable contexts and mode filters. Contexts were introduced in schema 3; see [Database initialization](deployment.md#database-initialization) for the current schema and upgrade behavior. Knowledge exports remain version 2. New publication requires explicit mode classification. See [Initial context](usage.md#initial-context) for the changed tool contract and client reconnection requirements. No live database reset or reimport is required.
 
 ## Stage 4: MCP tools and reviewed prompts
 

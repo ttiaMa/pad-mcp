@@ -97,7 +97,7 @@ At the start of each chat, call `get_development_context({})`: it returns `statu
 
 Pass `context_id` to every `search_patterns` and development `get_pattern` call. The server derives the mode from the context, including for Maintainers. An optional `power_fx` search argument is only a consistency check: a conflicting value fails. Mode-specific entries from the other edition and `unspecified` entries are excluded; `either` is included. Conventions are filtered before the 20-entry limit. Search and detail responses do not repeat the initial instructions.
 
-The server enforces immutable contexts, not chat identity: the agent must not create another context to switch modes within the same chat. Contexts survive restart and are separate from knowledge import/export. SQLite schema 2 migrates additively to schema 3; the portable JSON format remains version 2. Original content, revisions and bootstrap state are not rewritten. Older server versions that only support SQLite schema 2 cannot open the migrated database. Reconnect clients after upgrading so they load the changed tool schemas; older calls without a context now fail.
+The server enforces immutable contexts, not chat identity: the agent must not create another context to switch modes within the same chat. Contexts survive restart and are separate from knowledge import/export. See [Database initialization](deployment.md#database-initialization) for the current SQLite schema and upgrade behavior. The portable JSON format remains version 2. Original content, revisions and knowledge bootstrap state are not rewritten. Reconnect clients after upgrading so they load the changed tool schemas; older calls without a context now fail.
 
 ## External action and type references
 
@@ -117,7 +117,7 @@ Use `search_type_reference` with `{"context_id":"<returned UUID>","type_name":"S
 
 Search returns five summaries by default (maximum twenty), total match count and a truncation flag. Exact lookup returns one full record or `record: null`; do not combine an exact ID with query/module filters. Action detail includes relevant edition rules and Power Fx runtime caveats. It does not include the entire catalog or repeat the initial prompt.
 
-The source object identifies upstream repository, version, PAD build, commit, edition, license and cache status. `stale` means refresh failed and a previously validated pair is being used. With no valid pair, the tool returns an error; snippet and context tools remain available. Catalog content is separate from the team's published knowledge and is never automatically approved or imported.
+The source object identifies upstream repository, version, PAD build, commit, edition, license and cache status. `bundled` identifies the bundled catalogs and `approved` an activated snapshot. `stale` reports an update-check or recovery error while a validated local or bundled pair is still available. With no valid local or bundled pair, the tool returns an error; snippet and context tools remain available. Catalog content is separate from the team's published knowledge and is never automatically approved or imported.
 
 `get_development_context` returns the locally reviewed `development_prompt` only after mode selection, without requiring a network call. Shared guidance plus one edition-specific file are loaded from `src/prompts`; restart the server after editing them. Catalog updates do not overwrite these prompts. The agent should distinguish approved originals, adapted code, upstream paste validation and actual PAD execution evidence.
 

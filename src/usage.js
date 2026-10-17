@@ -29,12 +29,12 @@ export class UsageStats {
       this.db.exec('BEGIN IMMEDIATE');
       // A key deleted while the handler ran must not be recreated or counted.
       this.db.prepare(`INSERT INTO usage_daily (day, key_id, tool, mode, calls, successes, errors, empty_results)
-        SELECT ?, id, ?, ?, 1, ?, ?, ? FROM api_keys WHERE id = ? AND disabled_at IS NULL
+        SELECT ?, id, ?, ?, 1, ?, ?, ? FROM api_keys WHERE id = ?
         ON CONFLICT(day, key_id, tool, mode) DO UPDATE SET calls = calls + 1,
           successes = successes + excluded.successes, errors = errors + excluded.errors,
           empty_results = empty_results + excluded.empty_results`)
         .run(this.day(), tool, mode, Number(success), Number(!success), Number(success && empty), keyId);
-      this.db.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ? AND disabled_at IS NULL')
+      this.db.prepare('UPDATE api_keys SET last_used_at = ? WHERE id = ?')
         .run(this.now().toISOString(), keyId);
       this.db.exec('COMMIT');
     } catch {

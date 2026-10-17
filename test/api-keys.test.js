@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { KnowledgeStore } from '../src/store.js';
 import { ApiKeys } from '../src/api-keys.js';
 import { createApp } from '../src/server.js';
+import { UsageStats } from '../src/usage.js';
 
 const exec = promisify(execFile);
 const maintainerToken = 'm'.repeat(48);
@@ -18,6 +19,35 @@ function fixture() {
   const path = join(dir, 'knowledge.sqlite');
   return path;
 }
+
+test('v5 cleanup removes disabled keys and obsolete storage while preserving active access and usage', t => {
+  const path = fixture();
+  let store = new KnowledgeStore(path);
+  t.after(() => { store.close(); rmSync(dirname(path), { recursive: true, force: true }); });
+  const keys = new ApiKeys(store.db);
+  const active = keys.create('Roby');
+  const revoked = keys.create('Revoked');
+  const context = store.developmentContext({ power_fx: 'enabled' });
+  store.saveDraft({ id: 'keep', expected_revision: 0, content: { title: 'Keep', problem: 'Keep', robin_code: 'original' } });
+  const original = store.get('keep', 'maintainer');
+  const usage = new UsageStats(store.db);
+  for (const key of [active, revoked]) usage.record({ keyId: key.id, tool: 'search_patterns', mode: 'power_fx', success: true });
+  const before = keys.authenticate(active.token);
+  store.db.exec('ALTER TABLE api_keys ADD COLUMN disabled_at TEXT; CREATE TABLE api_keys_bootstrap (id INTEGER PRIMARY KEY); INSERT INTO api_keys_bootstrap VALUES (1); PRAGMA user_version = 5;');
+  store.db.prepare('UPDATE api_keys SET disabled_at = ? WHERE id = ?').run(new Date().toISOString(), revoked.id);
+  store.close();
+  store = new KnowledgeStore(path);
+  const updated = new ApiKeys(store.db);
+  assert.deepEqual(updated.authenticate(active.token), before);
+  assert.equal(updated.authenticate(revoked.token), null);
+  assert.deepEqual(updated.list().map(key => key.id), [active.id]);
+  assert.equal(store.db.prepare('PRAGMA table_info(api_keys)').all().some(column => column.name === 'disabled_at'), false);
+  assert.equal(store.db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'api_keys_bootstrap'").get(), undefined);
+  assert.deepEqual(store.developmentContext({ context_id: context.context_id }), context);
+  assert.deepEqual(store.get('keep', 'maintainer'), original);
+  assert.equal(new UsageStats(store.db).report().summary.calls, 1);
+  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 6);
+});
 
 test('keys persist as hashes, have no expiry, and deletion removes the record permanently', t => {
   const path = fixture();
@@ -57,7 +87,7 @@ test('v3 migration preserves knowledge and immutable contexts', t => {
   store.db.exec('DROP TABLE usage_daily; DROP TABLE api_keys; PRAGMA user_version = 3;');
   store.close();
   store = new KnowledgeStore(path);
-  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 5);
+  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 6);
   assert.deepEqual(store.export({}), before);
   assert.deepEqual(store.developmentContext({ context_id: context.context_id }), context);
 });
@@ -114,19 +144,4 @@ test('CLI changes are visible to a running server and developer keys cannot invo
   await assert.rejects(cli('create', '--name', 'No', '--role', 'maintainer'));
   await assert.rejects(cli('delete', '--id', key.id));
   await assert.rejects(cli('delete', '--id', 'missing'));
-});
-
-test('keys disabled by older releases stay rejected and can be permanently deleted', () => {
-  const store = new KnowledgeStore(':memory:');
-  try {
-    const keys = new ApiKeys(store.db);
-    const old = keys.create('Old disabled key');
-    const active = keys.create('Roby');
-    store.db.prepare('UPDATE api_keys SET disabled_at = ? WHERE id = ?').run(new Date().toISOString(), old.id);
-    assert.equal(keys.authenticate(old.token), null);
-    assert.ok(keys.list().find(key => key.id === old.id).disabled_at);
-    keys.delete(old.id);
-    assert.equal(store.db.prepare('SELECT 1 FROM api_keys WHERE id = ?').get(old.id), undefined);
-    assert.equal(keys.authenticate(active.token).id, active.id);
-  } finally { store.close(); }
 });
