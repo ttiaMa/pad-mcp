@@ -32,9 +32,9 @@ export class KnowledgeStore {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (![0, 2, 3].includes(version)) {
+    if (![0, 2, 3, 4].includes(version)) {
       this.db.close();
-      throw new Error(`Unsupported database schema ${version}; expected 2 or 3.`);
+      throw new Error(`Unsupported database schema ${version}; expected 2, 3 or 4.`);
     }
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
     if (version === 0) this.db.exec(`
@@ -69,6 +69,23 @@ export class KnowledgeStore {
       CREATE TRIGGER immutable_development_context BEFORE UPDATE ON development_contexts
         BEGIN SELECT RAISE(ABORT, 'Development contexts are immutable'); END;
       PRAGMA user_version = 3;
+      COMMIT;
+    `); } catch (error) {
+      try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
+      this.db.close();
+      throw error;
+    }
+    if (version < 4) try { this.db.exec(`
+      BEGIN IMMEDIATE;
+      CREATE TABLE api_keys (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL,
+        disabled_at TEXT
+      );
+      CREATE TABLE api_keys_bootstrap (id INTEGER PRIMARY KEY CHECK (id = 1));
+      PRAGMA user_version = 4;
       COMMIT;
     `); } catch (error) {
       try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }

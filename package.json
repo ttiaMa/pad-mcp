@@ -10,8 +10,9 @@
     "start": "node --env-file-if-exists=.env src/index.js",
     "dev": "node --env-file-if-exists=.env --watch src/index.js",
     "test": "node --test \"test/*.test.js\"",
-    "check": "node --check src/index.js && node --check src/bootstrap.js && node --check src/store.js && node --check src/server.js && node --check src/schema.js && node --check src/catalog.js && node --check src/catalog-cache.js && node --check src/prompts.js && node --check scripts/transfer.js",
-    "transfer": "node --env-file-if-exists=.env scripts/transfer.js"
+    "check": "node --check src/index.js && node --check src/bootstrap.js && node --check src/store.js && node --check src/server.js && node --check src/schema.js && node --check src/catalog.js && node --check src/catalog-cache.js && node --check src/prompts.js && node --check scripts/transfer.js && node --check src/api-keys.js && node --check scripts/keys.js",
+    "transfer": "node --env-file-if-exists=.env scripts/transfer.js",
+    "keys": "node --env-file-if-exists=.env scripts/keys.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
