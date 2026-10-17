@@ -45,6 +45,4 @@ Catalog examples validated by pasting into PAD are useful references; they do no
 
 ---
 
-For contributors: `npm run check` and `npm test`. See [architecture and cache](docs/catalog.md) and [verification results](docs/verification.md).
-
 Code licensed under [MIT](LICENSE). Third-party materials retain their respective licenses.
