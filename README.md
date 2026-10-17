@@ -39,7 +39,7 @@ Run pad-mcp in a single Docker container, with a SQLite database for your team's
 
 ## Credits
 
-The action/type catalogs come from **[JoeG592's PAD Robin Action Knowledge Base](https://github.com/JoeG592/pad-robin-action-kb)**. Thank you for making this reference available. See [attribution and adaptations](src/prompts/NOTICE.md).
+The action/type catalogs come from **[JoeG592's PAD Robin Action Knowledge Base](https://github.com/JoeG592/pad-robin-action-kb)**. Thank you for making this reference available.
 
 Catalog examples validated by pasting into PAD are useful references; they do not prove that a newly composed flow will run correctly.
 

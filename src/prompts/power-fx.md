@@ -20,6 +20,6 @@ Built-in flow forms (each statement on its own line):
 - LOOP i FROM $fx'=1' TO $fx'=CountRows(Items)' STEP $fx'=1' ... END
 - WAIT $fx'=2'
 
-Use catalog examples for action-based conditions and loops. Do not assume Classic SWITCH/CASE or other unlisted forms work in the target Power Fx flow without compatible verified evidence.
+Use catalog examples for action-based conditions and loops. Do not generate SWITCH/CASE in Power Fx flows. Use IF/ELSE branches instead. Do not assume other unlisted forms work in the target Power Fx flow without compatible verified evidence.
 
 Block error handling layout: BLOCK Name, ON BLOCK ERROR, SET Failed TO $fx'=true', END, the protected actions, END. Per-action ON ERROR ... END follows an action that supports errors. Some expression/load failures are not caught by these handlers. A cloud-triggered incompatible-PowerFx-version message can indicate a load error; inspect PAD's RobinEngine logs instead of assuming a version mismatch. Validate new compositions with real inputs in a test flow, including cloud invocation when that is the intended deployment.

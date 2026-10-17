@@ -41,7 +41,7 @@ The existing MCP knowledge tools now use persistent immutable contexts and mode 
 
 `search_actions` and `search_type_reference` are available to both roles and require a valid context before any catalog download. The server derives the edition from the stored mode. Invalid or ambiguous lookup arguments fail before network access. Async download failures are returned as MCP errors; cached fallback carries its stale status and refresh error.
 
-The context tool loads shared guidance and only the selected edition's prompt, without downloading a catalog. Read [common](../src/prompts/common.md), [Classic](../src/prompts/classic.md), [Power Fx](../src/prompts/power-fx.md) and [attribution](../src/prompts/NOTICE.md). Full action detail includes type rules and the upstream Power Fx rules/exception metadata where present. Search summaries remain small.
+The context tool loads shared guidance and only the selected edition's prompt, without downloading a catalog. Read [common](../src/prompts/common.md), [Classic](../src/prompts/classic.md) and [Power Fx](../src/prompts/power-fx.md). Full action detail includes type rules and the upstream Power Fx rules/exception metadata where present. Search summaries remain small.
 
 ## Verification
 
