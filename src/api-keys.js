@@ -17,7 +17,7 @@ export class ApiKeys {
     return { ...key, token };
   }
 
-  // Import once: a stale environment value must never resurrect a disabled key.
+  // Import once: a stale environment value must never resurrect a deleted key.
   importLegacy(token) {
     if (!token) return;
     this.db.exec('BEGIN IMMEDIATE');
@@ -36,17 +36,14 @@ export class ApiKeys {
 
   list() { return this.db.prepare(`SELECT ${columns} FROM api_keys ORDER BY created_at, id`).all(); }
 
-  disable(id) {
-    const key = this.db.prepare(`SELECT ${columns} FROM api_keys WHERE id = ?`).get(id);
+  delete(id) {
+    const key = this.db.prepare('DELETE FROM api_keys WHERE id = ? RETURNING id').get(id);
     if (!key) throw new Error('API key not found.');
-    if (!key.disabled_at) {
-      this.db.prepare('UPDATE api_keys SET disabled_at = ? WHERE id = ? AND disabled_at IS NULL')
-        .run(new Date().toISOString(), id);
-    }
-    return this.db.prepare(`SELECT ${columns} FROM api_keys WHERE id = ?`).get(id);
+    return { id: key.id, deleted: true };
   }
 
   authenticate(token) {
+    // Preserve revocations made by older releases; those records can also be deleted.
     return this.db.prepare(`SELECT ${columns} FROM api_keys WHERE token_hash = ? AND disabled_at IS NULL`)
       .get(hash(token)) ?? null;
   }

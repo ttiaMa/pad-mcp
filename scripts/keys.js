@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import { KnowledgeStore } from '../src/store.js';
 import { ApiKeys } from '../src/api-keys.js';
 
-const usage = 'Usage: npm run keys -- create --name "Name" | list | disable --id <ID>';
+const usage = 'Usage: npm run keys -- create --name "Name" | list | delete --id <ID>';
 let store;
 try {
   const { values, positionals } = parseArgs({
@@ -13,14 +13,14 @@ try {
   if (values.help) {
     console.log(usage);
   } else {
-    if (positionals.length !== 1 || !['create', 'list', 'disable'].includes(command)
+    if (positionals.length !== 1 || !['create', 'list', 'delete'].includes(command)
       || (command === 'create' && (!values.name || values.id !== undefined))
-      || (command === 'disable' && (!values.id || values.name !== undefined))
+      || (command === 'delete' && (!values.id || values.name !== undefined))
       || (command === 'list' && (values.name !== undefined || values.id !== undefined))) throw new Error(usage);
     store = new KnowledgeStore(process.env.DATABASE_PATH ?? './data/knowledge.sqlite');
     const keys = new ApiKeys(store.db);
     const output = command === 'create' ? keys.create(values.name)
-      : command === 'disable' ? keys.disable(values.id) : keys.list();
+      : command === 'delete' ? keys.delete(values.id) : keys.list();
     console.log(JSON.stringify(output, null, 2));
     if (command === 'create') console.error('Save this token now. It cannot be retrieved again.');
   }

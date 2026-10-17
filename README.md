@@ -25,7 +25,7 @@ The agent produces **Robin, the scripting language behind PAD flows**. Copy the 
 
 **Developers** use published snippets and action references to build PAD flows. **Maintainers** can do the same, plus create and edit snippets, review drafts, publish updates and manage revision history.
 
-Set the Maintainer API key through the `MCP_MAINTAINER_TOKEN` environment variable. Create, list and disable individual Developer API keys from the server terminal. See [API key management](docs/api-keys.md) for instructions.
+Set the Maintainer API key through the `MCP_MAINTAINER_TOKEN` environment variable. Create, list or delete individual Developer API keys from the server terminal. See [API key management](docs/api-keys.md) for instructions.
 
 ## Get started
 

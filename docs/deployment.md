@@ -46,7 +46,7 @@ Keep `CATALOG_CACHE_PATH` writable by the service user and on persistent storage
 
 Unknown Host headers and Origins different from `PUBLIC_URL` are rejected. Non-browser MCP clients can omit Origin. Update `PUBLIC_URL` when changing the domain. Do not enable broad CORS to bypass these checks.
 
-The Maintainer authenticates with `MCP_MAINTAINER_TOKEN`. Developers authenticate with individual keys created from the server terminal; SQLite stores only their hashes and metadata. Disabling a Developer key rejects subsequent requests without restarting the server. See [API key management](api-keys.md) for commands, rotation and migration from the old shared token. No SQL port needs to be exposed.
+The Maintainer authenticates with `MCP_MAINTAINER_TOKEN`. Developers authenticate with individual keys created from the server terminal; SQLite stores only their hashes and metadata. Deleting a Developer key rejects subsequent requests without restarting the server. See [API key management](api-keys.md) for commands, rotation and migration from the old shared token. No SQL port needs to be exposed.
 
 ## Local Docker Compose
 

@@ -19,7 +19,7 @@ function fixture() {
   return path;
 }
 
-test('keys persist as hashes, have no expiry, and disable is permanent and idempotent', t => {
+test('keys persist as hashes, have no expiry, and deletion removes the record permanently', t => {
   const path = fixture();
   let store = new KnowledgeStore(path);
   t.after(() => { store.close(); rmSync(dirname(path), { recursive: true, force: true }); });
@@ -36,15 +36,16 @@ test('keys persist as hashes, have no expiry, and disable is permanent and idemp
   assert.ok(!JSON.stringify(keys.list()).includes(saved.token_hash));
   assert.ok(!('expires_at' in saved));
   for (const invalid of ['', ' ', 'x'.repeat(101), 'a\nb']) assert.throws(() => keys.create(invalid), /Name must/);
-  const disabled = keys.disable(key.id);
-  assert.deepEqual(keys.disable(key.id), disabled);
-  assert.throws(() => keys.disable('missing'), /not found/);
+  assert.deepEqual(keys.delete(key.id), { id: key.id, deleted: true });
+  assert.equal(store.db.prepare('SELECT * FROM api_keys WHERE id = ? OR token_hash = ?').get(key.id, saved.token_hash), undefined);
+  assert.throws(() => keys.delete(key.id), /not found/);
+  assert.throws(() => keys.delete('missing'), /not found/);
   store.close();
   store = new KnowledgeStore(path);
   keys = new ApiKeys(store.db);
   assert.equal(keys.authenticate(key.token), null);
   assert.equal(keys.authenticate(other.token).id, other.id);
-  assert.equal(keys.list().length, 2);
+  assert.equal(keys.list().length, 1);
 });
 
 test('legacy developer token imports once and cannot be resurrected by restart or env changes', t => {
@@ -56,7 +57,7 @@ test('legacy developer token imports once and cannot be resurrected by restart o
   const legacy = 'd'.repeat(48);
   keys.importLegacy(legacy);
   const key = keys.authenticate(legacy);
-  keys.disable(key.id);
+  keys.delete(key.id);
   store.close();
   store = new KnowledgeStore(path);
   keys = new ApiKeys(store.db);
@@ -64,7 +65,7 @@ test('legacy developer token imports once and cannot be resurrected by restart o
   keys.importLegacy('e'.repeat(48));
   assert.equal(keys.authenticate(legacy), null);
   assert.equal(keys.authenticate('e'.repeat(48)), null);
-  assert.equal(keys.list().length, 1);
+  assert.equal(keys.list().length, 0);
 });
 
 test('v3 migration preserves knowledge and immutable contexts', t => {
@@ -121,11 +122,31 @@ test('CLI changes are visible to a running server and developer keys cannot invo
   assert.ok(body.error || body.result?.isError);
   const context = await request(key.token, 'tools/call', { name: 'get_development_context', arguments: { power_fx: 'enabled' } });
   assert.equal((await context.json()).result.structuredContent.status, 'ready');
-  await cli('disable', '--id', key.id);
+  await assert.rejects(cli('disable', '--id', key.id));
+  assert.equal((await request(key.token, 'tools/list')).status, 200);
+  assert.deepEqual(await cli('delete', '--id', key.id), { id: key.id, deleted: true });
+  assert.deepEqual((await cli('list')).map(item => item.id), [second.id]);
+  assert.equal(store.db.prepare('SELECT 1 FROM api_keys WHERE id = ?').get(key.id), undefined);
   assert.equal((await request(key.token, 'tools/list')).status, 401);
   assert.equal((await request(second.token, 'tools/list')).status, 200);
   const admin = await request(maintainerToken, 'tools/list');
   assert.ok((await admin.json()).result.tools.some(tool => tool.name === 'save_draft'));
   await assert.rejects(cli('create', '--name', 'No', '--role', 'maintainer'));
-  await assert.rejects(cli('disable', '--id', 'missing'));
+  await assert.rejects(cli('delete', '--id', key.id));
+  await assert.rejects(cli('delete', '--id', 'missing'));
+});
+
+test('keys disabled by older releases stay rejected and can be permanently deleted', () => {
+  const store = new KnowledgeStore(':memory:');
+  try {
+    const keys = new ApiKeys(store.db);
+    const old = keys.create('Old disabled key');
+    const active = keys.create('Roby');
+    store.db.prepare('UPDATE api_keys SET disabled_at = ? WHERE id = ?').run(new Date().toISOString(), old.id);
+    assert.equal(keys.authenticate(old.token), null);
+    assert.ok(keys.list().find(key => key.id === old.id).disabled_at);
+    keys.delete(old.id);
+    assert.equal(store.db.prepare('SELECT 1 FROM api_keys WHERE id = ?').get(old.id), undefined);
+    assert.equal(keys.authenticate(active.token).id, active.id);
+  } finally { store.close(); }
 });

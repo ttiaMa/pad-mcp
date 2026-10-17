@@ -28,7 +28,7 @@ To give a Developer access, open another terminal in the project directory and c
 npm run keys -- create --name "Roby"
 ```
 
-Copy the returned token and share it privately. See [API key management](api-keys.md) for listing, disabling and migrating keys.
+Copy the returned token and share it privately. See [API key management](api-keys.md) for listing, deleting and migrating keys.
 
 ## Deploy on Coolify
 
@@ -111,4 +111,4 @@ Ask either agent:
 
 > Use pad-mcp to load the development context, then search for an approved pattern for processing a list in batches.
 
-An empty result is expected until a Maintainer publishes matching content. Developer connections should expose retrieval tools but no `save_draft` or `delete_pattern` tool. A `401` usually means the client did not inherit `PAD_MCP_TOKEN`, the token is incorrect, or the Developer key has been disabled. Do not paste tokens into chat or commit their values to configuration files.
+An empty result is expected until a Maintainer publishes matching content. Developer connections should expose retrieval tools but no `save_draft` or `delete_pattern` tool. A `401` usually means the client did not inherit `PAD_MCP_TOKEN`, the token is incorrect, or the Developer key has been deleted. Do not paste tokens into chat or commit their values to configuration files.

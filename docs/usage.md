@@ -2,7 +2,7 @@
 
 ## Connect an agent
 
-Use `https://mcp.example.com/mcp` with `Authorization: Bearer <token>`. Use your individual Developer API key for development assistance or the Maintainer key for maintaining the collection. See [API key management](api-keys.md) to create, list and disable Developer keys.
+Use `https://mcp.example.com/mcp` with `Authorization: Bearer <token>`. Use your individual Developer API key for development assistance or the Maintainer key for maintaining the collection. See [API key management](api-keys.md) to create, list or delete Developer keys.
 
 Follow the [Codex and Claude Code setup instructions](setup.md#connect-codex-or-claude-code) for client configuration, environment variables and connection checks. Both clients use `PAD_MCP_TOKEN`; its value determines the role. The project's `.env` configures the server and transfer script, not the agent's environment.
 
