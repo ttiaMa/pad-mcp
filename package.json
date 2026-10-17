@@ -1,6 +1,7 @@
 {
   "name": "pad-mcp",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "Develop in Power Automate Desktop and migrate RPA code with AI responses shaped by your team's development style",

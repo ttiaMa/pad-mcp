@@ -24,9 +24,11 @@ The agent produces **Robin, the scripting language behind PAD flows**. Copy the 
 
 ## Keep what works
 
-**Maintainers** manage the collection; **Developers** use its published content. Original code and revision history are preserved. Adaptations are clearly separate from approved originals.
+**Developers** use published snippets and action references to build PAD flows. **Maintainers** can do the same, plus create and edit snippets, review drafts, publish updates and manage revision history.
 
-Self-host one container with SQLite on persistent storage. The external catalog refreshes on demand, at most once every 12 hours per edition, and keeps the previous valid copy if an update fails.
+Each role uses a different API key, configured on the server through the `MCP_MAINTAINER_TOKEN` and optional `MCP_DEVELOPER_TOKEN` environment variables. Connect your MCP client with the key for the role you need.
+
+Run pad-mcp in a single Docker container, with a SQLite database for your team's code snippets and automatically updated PAD action references cached locally.
 
 ## Get started
 
@@ -37,10 +39,12 @@ Self-host one container with SQLite on persistent storage. The external catalog 
 
 ## Credits
 
-The action/type catalogs come from **[JoeG592's PAD Robin Action Knowledge Base](https://github.com/JoeG592/pad-robin-action-kb)**, licensed under **CC BY 4.0**. Thank you for making this reference available. See [attribution and adaptations](src/prompts/NOTICE.md).
+The action/type catalogs come from **[JoeG592's PAD Robin Action Knowledge Base](https://github.com/JoeG592/pad-robin-action-kb)**. Thank you for making this reference available. See [attribution and adaptations](src/prompts/NOTICE.md).
 
 Catalog examples validated by pasting into PAD are useful references; they do not prove that a newly composed flow will run correctly.
 
 ---
 
 For contributors: `npm run check` and `npm test`. See [architecture and cache](docs/catalog.md) and [verification results](docs/verification.md).
+
+Code licensed under [MIT](LICENSE). Third-party materials retain their respective licenses.
