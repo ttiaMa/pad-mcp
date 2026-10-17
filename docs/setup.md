@@ -14,7 +14,7 @@ Copy-Item .env.example .env
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Set the generated value as `MCP_MAINTAINER_TOKEN` in `.env`. Optionally generate a different value for `MCP_DEVELOPER_TOKEN`, then run:
+Set the generated value as `MCP_MAINTAINER_TOKEN` in `.env`, then run:
 
 ```sh
 npm start
@@ -22,15 +22,24 @@ npm start
 
 Health check: `http://localhost:8080/healthz`. MCP endpoint: `http://localhost:8080/mcp`, with `Authorization: Bearer <token>`. The endpoint is a protocol interface, not a web page.
 
+To give a Developer access, open another terminal in the project directory and create an individual key:
+
+```sh
+npm run keys -- create --name "Roby"
+```
+
+Copy the returned token and share it privately. See [API key management](api-keys.md) for listing, disabling and migrating keys.
+
 ## Deploy on Coolify
 
 Docker Compose defines the application, environment, health check and persistent SQLite volume in one place.
 
 1. Make the project available in a Git repository accessible to Coolify.
 2. Create an application from the repository, select **Docker Compose**, and use `/compose.yaml`.
-3. Set `MCP_MAINTAINER_TOKEN` to a random secret of at least 32 characters and `PUBLIC_URL=https://mcp.example.com`. Optionally set a distinct `MCP_DEVELOPER_TOKEN`.
+3. Set `MCP_MAINTAINER_TOKEN` to a random secret of at least 32 characters and `PUBLIC_URL=https://mcp.example.com`.
 4. Set the `pad-mcp` service domain to `https://mcp.example.com:8080`. The suffix tells Coolify to route to internal port **8080**; public access still uses standard HTTPS.
-5. Deploy, check `https://mcp.example.com/healthz`, then connect your MCP client to `https://mcp.example.com/mcp` using the appropriate role token.
+5. Deploy, check `https://mcp.example.com/healthz`, then connect your MCP client to `https://mcp.example.com/mcp` using the Maintainer key.
+6. To give Developers access, open the application container's terminal, run `cd /app`, then `npm run keys -- create --name "Roby"`. Share the returned token privately with its recipient. See [API key management](api-keys.md).
 
 `PUBLIC_URL` must not contain `/mcp` or the internal port in production. The `knowledge_data` volume is mounted at `/app/data` and survives normal redeployments. Run **one instance** and back up the volume separately.
 
@@ -40,11 +49,11 @@ See [Deployment](deployment.md) for configuration and backups, and [Usage](usage
 
 Start or deploy the server first. Replace `https://mcp.example.com/mcp` below with your endpoint, or use `http://localhost:8080/mcp` for a local server.
 
-Both clients use a client-side environment variable named `PAD_MCP_TOKEN`. Its value must match one of the server's role tokens:
+Both clients use a client-side environment variable named `PAD_MCP_TOKEN`. Set it to the key for the access you need:
 
 | What the agent should do | Value to use for `PAD_MCP_TOKEN` |
 | --- | --- |
-| Retrieve shared patterns and help write PAD code | The server's `MCP_DEVELOPER_TOKEN` |
+| Retrieve shared patterns and help write PAD code | Your individual Developer API key, provided by the Maintainer |
 | Also add, publish, replace and delete knowledge | The server's `MCP_MAINTAINER_TOKEN` |
 
 For example, enter the token without putting it in shell history in **PowerShell 7**:
@@ -102,4 +111,4 @@ Ask either agent:
 
 > Use pad-mcp to load the development context, then search for an approved pattern for processing a list in batches.
 
-An empty result is expected until a Maintainer publishes matching content. Developer connections should expose retrieval tools but no `save_draft` or `delete_pattern` tool. A `401` usually means the client did not inherit `PAD_MCP_TOKEN`, or its value does not match a configured server token. Do not paste tokens into chat or commit their values to configuration files.
+An empty result is expected until a Maintainer publishes matching content. Developer connections should expose retrieval tools but no `save_draft` or `delete_pattern` tool. A `401` usually means the client did not inherit `PAD_MCP_TOKEN`, the token is incorrect, or the Developer key has been disabled. Do not paste tokens into chat or commit their values to configuration files.

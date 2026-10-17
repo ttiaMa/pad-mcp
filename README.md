@@ -22,13 +22,13 @@ At the start of the chat, the agent asks whether you use Classic PAD or Power Fx
 
 The agent produces **Robin, the scripting language behind PAD flows**. Copy the generated code and paste it into the PAD flow designer to turn it into actions, then review and test the flow.
 
-## Keep what works
+Run pad-mcp in a single Docker container, with a SQLite database for your team's code snippets and automatically updated PAD action references cached locally.
+
+## Roles and access
 
 **Developers** use published snippets and action references to build PAD flows. **Maintainers** can do the same, plus create and edit snippets, review drafts, publish updates and manage revision history.
 
-Each role uses a different API key, configured on the server through the `MCP_MAINTAINER_TOKEN` and optional `MCP_DEVELOPER_TOKEN` environment variables. Connect your MCP client with the key for the role you need.
-
-Run pad-mcp in a single Docker container, with a SQLite database for your team's code snippets and automatically updated PAD action references cached locally.
+Set the Maintainer API key through the `MCP_MAINTAINER_TOKEN` environment variable. Create, list and disable individual Developer API keys from the server terminal. See [API key management](docs/api-keys.md) for instructions.
 
 ## Get started
 

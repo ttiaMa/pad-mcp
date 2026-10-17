@@ -2,7 +2,7 @@
 
 ## Architecture
 
-One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index and persistent development contexts. No AI provider or remote database is required. Catalog lookups work offline. Daily update checks use outbound HTTPS to `api.github.com`; only Maintainer-approved updates download JSON from `raw.githubusercontent.com`. No credentials are sent to GitHub.
+One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index, persistent development contexts and Developer API key hashes and metadata. No AI provider or remote database is required. Catalog lookups work offline. Daily update checks use outbound HTTPS to `api.github.com`; only Maintainer-approved updates download JSON from `raw.githubusercontent.com`. No credentials are sent to GitHub.
 
 Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8080. The container runs as the unprivileged `node` user. The image uses Node 24; `npm ci` installs the exact dependency versions in the lockfile. Validate base-image updates before deployment.
 
@@ -11,14 +11,14 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 | Variable | Purpose |
 | --- | --- |
 | `MCP_MAINTAINER_TOKEN` | Required random secret, at least 32 characters; full knowledge-management access |
-| `MCP_DEVELOPER_TOKEN` | Optional separate secret; read-only access to all published entries |
+| `MCP_DEVELOPER_TOKEN` | Optional migration input: imports the old shared Developer token once as `legacy-developer`. Manage new keys through the CLI; see [API key management](api-keys.md) |
 | `PUBLIC_URL` | External origin such as `https://mcp.example.com`, without a path |
 | `HOST` | Local default `127.0.0.1`; container uses `0.0.0.0` |
 | `PORT` | Application port; Compose uses 8080 |
 | `DATABASE_PATH` | Local `./data/knowledge.sqlite`; container `/app/data/knowledge.sqlite` |
 | `CATALOG_CACHE_PATH` | Optional; defaults to `catalog-cache` beside the database. Compose uses `/app/data/catalog-cache` in the same persistent volume |
 
-The application rejects missing or short Maintainer credentials, short Developer credentials when supplied, and equal Developer/Maintainer tokens. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer token cannot mutate knowledge, but can create development contexts.
+The application rejects missing or short Maintainer credentials, short legacy Developer credentials when supplied, and equal legacy Developer/Maintainer tokens. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer key cannot mutate knowledge, but can create development contexts.
 
 ### Database initialization
 
@@ -30,7 +30,7 @@ To distribute an edited JSON export as the starting collection for a new install
 
 The database is stored on the `knowledge_data` volume at `/app/data/knowledge.sqlite`. Keep that volume attached across redeployments.
 
-Schema 2 upgrades additively to schema 3 without changing snippet content, revision history or the seed marker. Back up the volume before deploying an upgrade. Older binaries supporting only SQLite schema 2 cannot open schema 3: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
+Schemas 2 and 3 upgrade additively to schema 4, which adds Developer API keys and a one-time legacy-token import marker. Snippet content, revision history, existing development contexts and the seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only SQLite schema 2 or 3 cannot open schema 4: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
 
 ### Catalog persistence and outages
 
@@ -46,7 +46,7 @@ Keep `CATALOG_CACHE_PATH` writable by the service user and on persistent storage
 
 Unknown Host headers and Origins different from `PUBLIC_URL` are rejected. Non-browser MCP clients can omit Origin. Update `PUBLIC_URL` when changing the domain. Do not enable broad CORS to bypass these checks.
 
-This release uses two shared role credentials, not individual accounts, per-user audit attribution or a permissions administration UI. Tokens are not stored in SQLite. Rotate a token by updating its environment variable and redeploying, then update affected clients. No SQL port needs to be exposed.
+The Maintainer authenticates with `MCP_MAINTAINER_TOKEN`. Developers authenticate with individual keys created from the server terminal; SQLite stores only their hashes and metadata. Disabling a Developer key rejects subsequent requests without restarting the server. See [API key management](api-keys.md) for commands, rotation and migration from the old shared token. No SQL port needs to be exposed.
 
 ## Local Docker Compose
 
@@ -60,7 +60,7 @@ The local override publishes port 8080 on loopback only. On Coolify, use `compos
 
 ## Back up and restore
 
-JSON export includes only currently published revisions, without drafts or history. For a full backup:
+JSON export includes only currently published revisions, without drafts, history or API keys. For a full backup:
 
 1. Stop the service and wait for the process to exit.
 2. Copy or snapshot the `knowledge_data` volume, including any SQLite `-wal` and `-shm` files present.
