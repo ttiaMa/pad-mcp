@@ -13,7 +13,7 @@ The parser itself does not register MCP tools, download or cache files, create d
 - `searchActions({ query?, module?, max_results? })` searches names, modules, descriptions and parameter names/types. A module-only request browses that module. Module matching is case-insensitive and exact.
 - `searchActions({ action_id })` returns the complete exact record or `record: null`. IDs are case-sensitive. It cannot be combined with query/module filters.
 - `searchTypes({ query, max_results? })` searches type names, categories and descriptions.
-- `searchTypes({ type_name })` returns the complete exact type record and general formatting rules, or `record: null` if absent. Generic type names remain unchanged.
+- `searchTypes({ type_name })` returns the complete exact type record, or `record: null` if absent. Generic type names remain unchanged.
 
 Search defaults to five compact results, with a maximum of twenty, a total match count and truncation flag. Ranking prefers an exact identifier, then the number of matching normalized keywords, with stable identifier ordering for ties. CamelCase names are split into keywords. Search uses any matching term; it does not translate Italian or infer semantic matches. Callers should use upstream technical terms and module filters as needed.
 
@@ -27,7 +27,7 @@ The application and Docker image include all four original upstream JSON files i
 
 The entrypoint starts a background check at startup and then every 24 hours, including when there is no chat traffic. One shared GitHub `main` check covers both editions. Successful and failed checks persist their timestamp in `check.json`; a restart waits for the remaining interval. Maintainer context/status requests also perform a check when due, sharing the same serialized operation. Checks only resolve the repository commit; they never download or install catalog JSON. Failures retain any pending proposal and the current baseline.
 
-When the upstream SHA differs from the active baseline, `get_development_context` returns `catalog_update` only to Maintainers, even before selecting a PAD mode. The agent is instructed to ask whether to replace the local catalogs. Developers receive neither the proposal nor update tools. `get_catalog_update_status` allows a Maintainer to revisit the proposal. Declining leaves the current catalogs in use; the pending proposal remains available in later chats.
+When the upstream SHA differs from the active baseline, `get_development_context` returns `catalog_update` only to Maintainers, after selecting a PAD mode. The agent is instructed to ask whether to replace the local catalogs. Developers receive neither the proposal nor update tools. `get_catalog_update_status` allows a Maintainer to revisit the proposal. Declining leaves the current catalogs in use; the pending proposal remains available in later chats.
 
 Only the Maintainer-only `update_catalogs` tool can activate a remote snapshot. It requires `confirmed: true` and the exact offered `expected_commit`. A changed proposal requires fresh approval. The download pins all four stable filenames to that immutable SHA, validates both editions and verifies checksums before atomically switching one manifest for the complete snapshot. An upstream change after the proposal cannot change the approved download. Repeated approval of an already active commit is idempotent. Successful activation makes that commit the new baseline for subsequent daily checks.
 
@@ -45,7 +45,7 @@ MCP knowledge tools use persistent immutable contexts and mode filters. Contexts
 
 `search_actions` and `search_type_reference` are available to both roles and require a valid context. The server derives the edition from the stored mode. Lookups use only the active local snapshot; unavailable or invalid local data returns an MCP error.
 
-The context tool loads shared guidance and only the selected edition's prompt, without downloading a catalog. Read [common](../src/prompts/common.md), [Classic](../src/prompts/classic.md) and [Power Fx](../src/prompts/power-fx.md). Full action detail includes type rules and the upstream Power Fx rules/exception metadata where present. Search summaries remain small.
+The context tool loads shared guidance and only the selected edition's prompt, without downloading a catalog. Read [common](../src/prompts/common.md), [Classic](../src/prompts/classic.md) and [Power Fx](../src/prompts/power-fx.md). The context includes the original type rules and Power Fx rules/exception metadata where present. Action and type detail responses contain only the complete record, with no repeated rules or rule references. Search summaries remain small.
 
 ## Verification
 

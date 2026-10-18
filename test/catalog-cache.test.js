@@ -59,6 +59,12 @@ test('both real bundled editions are available on first use without network or a
     assert.ok(actions.total_matches > 5);
     assert.equal('source' in actions, false);
     assert.ok(index.searchTypes({ type_name: 'String' }).record);
+    const typeDoc = JSON.parse(await fs.readFile(new URL(`../catalogs/PAD_Robin_TypeReference${mode === 'enabled' ? '_PowerFx' : ''}.json`, import.meta.url), 'utf8'));
+    const actionDoc = JSON.parse(await fs.readFile(new URL(`../catalogs/PAD_Robin_ActionKB${mode === 'enabled' ? '_PowerFx' : ''}.json`, import.meta.url), 'utf8'));
+    assert.deepEqual(index.developmentRules(), { types: typeDoc.rules, ...(actionDoc.power_fx ? { power_fx: actionDoc.power_fx } : {}) });
+    const rules = index.developmentRules();
+    rules.types.length = 0;
+    assert.deepEqual(index.developmentRules().types, typeDoc.rules);
   }
   await assert.rejects(cache.get('../elsewhere'));
 });

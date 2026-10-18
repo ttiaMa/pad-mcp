@@ -51,7 +51,7 @@ If your initial message already approves the exact submitted content, the agent 
 
 ### Authoring from informal context
 
-Supply the original Robin block and explain its purpose naturally. If your client supports voice input, its transcript can be used as the explanation. The connected agent prepares the entry using `authoring_guidance` returned to Maintainers by `get_development_context`; the same guidance is included in the Maintainer's MCP server instructions and reinforced in the tool's field descriptions.
+Supply the original Robin block and explain its purpose naturally. If your client supports voice input, its transcript can be used as the explanation. The connected agent prepares the entry using `authoring_guidance` returned to Maintainers by `get_development_context` after mode selection.
 
 The agent should extract:
 
@@ -95,7 +95,7 @@ Fixed server instructions and base guidance are in `src/server.js`. Changing the
 
 Editable development conventions are entries with `kind=convention` and `area=global`. Publish them through the same tools as snippets; the next `get_development_context` call reads the updated database content. All published conventions are shared with Developers. Long collections are capped at 20 global conventions per context response.
 
-At the start of each chat, call `get_development_context({})`: it returns `status: "selection_required"` and no conventions. Ask the user whether the chat uses Classic or Power Fx, then call it with `power_fx: "disabled"` or `"enabled"`. The response contains a persistent `context_id`. Reuse that ID throughout the chat; it cannot change mode. To reload compatible conventions, call `get_development_context({ context_id })`.
+At the start of each chat, call `get_development_context({})`: it returns `status: "selection_required"` and the mode question only, for both roles. Ask the user whether the chat uses Classic or Power Fx, then call it with `power_fx: "disabled"` or `"enabled"`. The response contains a persistent `context_id`. Reuse that ID throughout the chat; it cannot change mode. To reload compatible conventions, call `get_development_context({ context_id })`.
 
 Pass `context_id` to every `search_patterns` and development `get_pattern` call. The server derives the mode from the context, including for Maintainers. An optional `power_fx` search argument is only a consistency check: a conflicting value fails. Mode-specific entries from the other edition and `unspecified` entries are excluded; `either` is included. Conventions are filtered before the 20-entry limit. Search and detail responses do not repeat the initial instructions.
 
@@ -117,11 +117,11 @@ Pass those arguments to `search_actions`. Then request the selected record:
 
 Use `search_type_reference` with `{"context_id":"<returned UUID>","type_name":"String"}` or a type name returned in the action's parameters. Exact identifiers are case-sensitive; preserve generic type notation. Use English technical keywords for catalog searches. The action category is its upstream `module`.
 
-Search returns five summaries by default (maximum twenty), total match count and a truncation flag. Exact lookup returns one full record or `record: null`; do not combine an exact ID with query/module filters. Action detail includes relevant edition rules and Power Fx runtime caveats. It does not include the entire catalog or repeat the initial prompt.
+Search returns five summaries by default (maximum twenty), total match count and a truncation flag. Exact lookup returns one full record or `record: null`; do not combine an exact ID with query/module filters. General edition rules and Power Fx runtime caveats are included once in the development context. It does not include the entire catalog or repeat the initial prompt.
 
 Catalog lookups omit provenance metadata. Attribution remains in the project documentation and bundled files. With no valid local or bundled pair, the tool returns an error; snippet tools remain available. Catalog content is separate from the team's published knowledge and is never automatically approved or imported.
 
-`get_development_context` returns the locally reviewed `development_prompt` only after mode selection, without requiring a network call. Shared guidance plus one edition-specific file are loaded from `src/prompts`; restart the server after editing them. Catalog updates do not overwrite these prompts. The agent should distinguish approved originals, adapted code, upstream paste validation and actual PAD execution evidence.
+`get_development_context` returns the locally reviewed `development_prompt` only after mode selection, without requiring a network call. Shared guidance plus one edition-specific file are loaded from `src/prompts`, followed by the original rules from the active local catalog; restart the server after editing them. Catalog updates do not overwrite these prompt files. Reload the context after an update to obtain its current rules. If the catalog is unavailable, `catalog_error` explains the limitation while compatible snippet retrieval remains usable. The agent should distinguish approved originals, adapted code, upstream paste validation and actual PAD execution evidence.
 
 ## Entry fields
 

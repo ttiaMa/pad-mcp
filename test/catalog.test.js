@@ -81,7 +81,8 @@ test('type lookup supports generic names, compact keyword search and complete fo
   const index = new CatalogIndex(fixture());
   const result = index.searchTypes({ type_name: 'List`1<String>' });
   assert.equal(result.record.type, 'List`1<String>');
-  assert.deepEqual(result.rules, ['Synthetic type rule']);
+  assert.deepEqual(Object.keys(result), ['record']);
+  assert.deepEqual(index.developmentRules(), { types: ['Synthetic type rule'] });
   assert.equal(index.searchTypes({ query: 'String' }).results[0].type, 'String');
   assert.equal('example' in index.searchTypes({ query: 'text' }).results[0], false);
   assert.equal(index.searchTypes({ type_name: 'Missing' }).record, null);

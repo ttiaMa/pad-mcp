@@ -3,11 +3,11 @@
 Use the Classic action/type editions. Do not introduce Power Fx expressions or $fx values.
 
 Value syntax:
-- Strings use $'''value'''; empty text is $''''''. Numbers and True/False are bare.
+- Empty text is $''''''.
 - Variables and expressions outside strings are bare: SET Total TO Price * Qty, IF Files.Count = 0 THEN, Row['Amount'].
 - Percent interpolation belongs only inside strings, such as $'''Total %Total%'''. A literal percent inside a string is %%.
 - Escape an apostrophe as \' inside strings. Double a backslash before interpolation or the closing quotes. UNC strings start with four backslashes. Follow the retrieved type examples for paths and escaping.
-- Enums use exactly the fully qualified value shown by the selected action; outputs use Name=> Variable.
+- Outputs use Name=> Variable.
 - Classic list indexing starts at zero. Do not transfer that rule to Excel row/column parameters or other APIs; consult the action/type reference.
 - Use bracket access for keyword properties, such as Mail['From'].
 

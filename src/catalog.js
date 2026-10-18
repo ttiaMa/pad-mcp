@@ -97,13 +97,16 @@ export class CatalogIndex {
       [record.type, record.category, record.description]));
   }
 
+  developmentRules() {
+    return structuredClone({ types: this.#pair.types.rules,
+      ...(this.#pair.actions.power_fx ? { power_fx: this.#pair.actions.power_fx } : {}) });
+  }
+
   searchActions(args) {
     const { action_id, query, module, max_results } = actionLookup.parse(args);
     if (action_id) {
       const record = this.#actions.find(item => item.id === action_id)?.record;
-      return structuredClone({ record: record ?? null,
-        reference_rules: { types: this.#pair.types.rules,
-          ...(this.#pair.actions.power_fx ? { power_fx: this.#pair.actions.power_fx } : {}) } });
+      return structuredClone({ record: record ?? null });
     }
     const candidates = module ? this.#actions.filter(item => item.record.module.toLowerCase() === module.toLowerCase()) : this.#actions;
     const matches = rank(candidates, query);
@@ -119,7 +122,7 @@ export class CatalogIndex {
     const { type_name, query, max_results } = typeLookup.parse(args);
     if (type_name) {
       const record = this.#types.find(item => item.id === type_name)?.record;
-      return structuredClone({ record: record ?? null, rules: this.#pair.types.rules });
+      return structuredClone({ record: record ?? null });
     }
     const matches = rank(this.#types, query);
     return { total_matches: matches.length, truncated: matches.length > max_results,

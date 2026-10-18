@@ -15,6 +15,7 @@ import { ApiKeys } from '../src/api-keys.js';
 import { createApp, validateConfig } from '../src/server.js';
 import { contentSchema } from '../src/schema.js';
 import { DatabaseSync } from 'node:sqlite';
+import { CatalogIndex } from '../src/catalog.js';
 import { CatalogCache } from '../src/catalog-cache.js';
 import { documents, writeBundle } from './fixtures/catalog.js';
 
@@ -31,7 +32,7 @@ function toolData(response) {
 const testContexts = new WeakMap();
 const testRoles = new WeakMap();
 
-async function setup(t, dependencies = { catalogCache: { checkForUpdates: async () => ({ status: 'current' }) } }) {
+async function setup(t, dependencies = { catalogCache: { checkForUpdates: async () => ({ status: 'current' }), get: async mode => new CatalogIndex({ ...documents(mode, 'a'), power_fx: mode }) } }) {
   const store = new KnowledgeStore(':memory:');
   const developerToken = new ApiKeys(store.db).create('Test Developer').token;
   const listener = createApp(store, config, dependencies).listen(0, '127.0.0.1');
@@ -515,20 +516,27 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
     assert.equal(exact.record.golden_example, mode + '-a');
     assert.equal('source' in exact, false);
     assert.equal('development_prompt' in exact, false);
-    assert.equal('power_fx' in exact.reference_rules, mode === 'enabled');
+    assert.deepEqual(Object.keys(exact), ['record']);
+    const context = await call(developer, 'get_development_context', { context_id: id });
+    const rules = JSON.parse(context.development_prompt.split('Catalog rules for the selected mode:\n')[1]);
+    assert.deepEqual(rules, (await catalogCache.get(mode)).developmentRules());
     const type = await call(developer, 'search_type_reference', { context_id: id, type_name: 'String' });
     assert.equal(type.record.example, mode + '-a');
   }
-  // Only maintainer contexts/status expose the proposal, including before mode selection.
+  // Only maintainer contexts/status expose the proposal, after mode selection.
   const proposal = (await call(maintainer, 'get_development_context')).catalog_update;
   assert.equal(proposal.status, 'update_available');
   assert.equal('repository' in proposal, false);
   assert.equal((await call(maintainer, 'get_development_context', {})).catalog_update.available_commit, 'b'.repeat(40));
   const selection = await maintainer.callTool({ name: 'get_development_context', arguments: {} });
   assert.equal(toolData(selection).status, 'selection_required');
-  assert.equal(toolData(selection).catalog_update.status, 'update_available');
+  assert.deepEqual(Object.keys(toolData(selection)).sort(), ['question', 'status']);
   assert.equal('catalog_update' in fxPrompt, false);
   assert.equal('authoring_guidance' in fxPrompt, false);
+  assert.equal('catalog_error' in fxPrompt, false);
+  assert.equal('instructions' in fxPrompt, false);
+  assert.equal('guidance' in fxPrompt, false);
+  assert.equal(maintainer.getInstructions(), developer.getInstructions());
   const developerTools = (await developer.listTools()).tools.map(tool => tool.name);
   for (const name of ['get_catalog_update_status', 'update_catalogs']) {
     assert.equal(developerTools.includes(name), false);
@@ -564,5 +572,7 @@ test('catalog failure is a tool error and leaves context and approved patterns u
   assert.match(result.content[0].text, /Catalog unavailable/);
   await save(maintainer, 'available'); await publish(maintainer, 'available');
   assert.equal((await call(developer, 'search_patterns', { query: 'pagination' })).results.length, 1);
-  assert.equal((await call(developer, 'get_development_context')).status, 'ready');
+  const context = await call(developer, 'get_development_context');
+  assert.equal(context.status, 'ready');
+  assert.match(context.catalog_error, /Catalog unavailable/);
 });
