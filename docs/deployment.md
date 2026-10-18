@@ -56,7 +56,7 @@ Schemas 2–5 upgrade to schema 6. Earlier migrations add development contexts, 
 
 ### Catalog persistence and outages
 
-The application and Docker image bundle the Classic and Power Fx action/type JSON files. Both editions are available immediately, including offline. A shared background checker inspects upstream `main` once every 24 hours, persisting its cadence across restarts. Detection never activates an update. At the next Maintainer chat, the context response asks the agent to show the repository link and obtain approval; Developer chats have no update prompt or update tool.
+The application and Docker image bundle the Classic and Power Fx action/type JSON files. Both editions are available immediately, including offline. A shared background checker inspects upstream `main` once every 24 hours, persisting its cadence across restarts. Detection never activates an update. At the next Maintainer chat, after mode selection, the context response asks the agent to obtain approval; Developer chats have no update prompt or update tool.
 
 After approval, all four files from the offered commit are validated and activated as one persistent snapshot. This overrides the bundled baseline, survives restarts/redeploys, and becomes the baseline for future checks. The current and previous approved snapshots are retained with checksums. Failed downloads or writes keep the current snapshot. Startup can recover the previous snapshot or the bundle. Older per-edition auto-refresh cache directories are retained but ignored; no database migration or deletion is needed.
 
