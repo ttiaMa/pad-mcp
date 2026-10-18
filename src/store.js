@@ -3,6 +3,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+export const PATTERN_PREVIEW_LENGTH = 600;
+
 export class KnowledgeError extends Error {}
 
 // Small bilingual expansion; no model or external embedding service is required.
@@ -160,7 +162,13 @@ export class KnowledgeStore {
     if (args.power_fx !== undefined && args.power_fx !== context.power_fx) {
       throw new KnowledgeError('Power Fx filter conflicts with the development context.');
     }
-    return this.search({ ...args, power_fx: context.power_fx }, role);
+    const found = this.search({ ...args, power_fx: context.power_fx }, role);
+    return { ...found, results: found.results.map(({ id, revision, content }) => {
+      const problem = Array.from(content.problem);
+      return { id, revision, kind: content.kind, title: content.title,
+        problem: problem.slice(0, PATTERN_PREVIEW_LENGTH).join(''),
+        ...(problem.length > PATTERN_PREVIEW_LENGTH ? { problem_truncated: true } : {}) };
+    }) };
   }
 
   getDevelopmentPattern({ id, revision, context_id }) {

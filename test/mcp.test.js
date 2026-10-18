@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { KnowledgeStore } from '../src/store.js';
+import { KnowledgeStore, PATTERN_PREVIEW_LENGTH } from '../src/store.js';
 import { ApiKeys } from '../src/api-keys.js';
 import { createApp, validateConfig } from '../src/server.js';
 import { contentSchema } from '../src/schema.js';
@@ -93,7 +93,8 @@ test('draft -> exact publication -> new draft preserves published code and revis
   assert.equal(draft.content.robin_code, code);
   assert.equal((await call(maintainer, 'search_patterns', { query: 'pagination' })).results.length, 0);
   await publish(maintainer, 'pagination');
-  assert.equal((await call(developer, 'search_patterns', { query: 'dividere in gruppi' })).results[0].content.robin_code, code);
+  const preview = (await call(developer, 'search_patterns', { query: 'dividere in gruppi' })).results[0];
+  assert.equal((await call(developer, 'get_pattern', { id: preview.id, revision: preview.revision })).content.robin_code, code);
   await save(maintainer, 'pagination', { robin_code: 'changed code' }, 1);
   assert.equal((await call(developer, 'get_pattern', { id: 'pagination' })).revision, 1);
   assert.equal((await call(developer, 'get_pattern', { id: 'pagination' })).latest_revision, undefined);
@@ -211,8 +212,7 @@ test('development content stays lean through MCP schemas, storage, retrieval and
     assert.deepEqual((await call(client, 'get_pattern', { id: 'lean' })).content, original);
     // Full content remains searchable server-side, including limitations.
     const response = await client.callTool({ name: 'search_patterns', arguments: { query: 'limitationuniqueterm', context_id: testContexts.get(client) } });
-    assert.deepEqual(toolData(response).results[0].content, original);
-    assert.deepEqual(JSON.parse(response.content[0].text), toolData(response));
+    assert.deepEqual(toolData(response).results[0], { id: 'lean', revision: 1, kind: original.kind, title: original.title, problem: original.problem });
     assert.deepEqual((await call(client, 'get_development_context')).conventions[0].content, original);
     const exported = await call(client, 'export_knowledge');
     assert.equal(exported.schema_version, 2);
@@ -563,6 +563,30 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
   assert.equal(store.export({}).entries.length, 0); // Catalog never becomes approved knowledge.
   const restarted = new CatalogCache({ directory, bundle_directory, fetch, now: () => now });
   assert.equal((await restarted.get('enabled')).searchTypes({ type_name: 'String' }).record.example, 'enabled-b');
+});
+
+test('pattern previews are bounded, preserve Unicode and retrieve only the selected published revision', async t => {
+  const { developer, maintainer } = await setup(t);
+  const original = content({ problem: '😀'.repeat(PATTERN_PREVIEW_LENGTH) + ' tail', pitfalls: ['searchableuniqueconstraint'] });
+  await call(maintainer, 'save_draft', { id: 'long-preview', expected_revision: 0, content: original });
+  await publish(maintainer, 'long-preview');
+  await save(maintainer, 'other-preview', { problem: 'searchableuniqueconstraint', robin_code: 'OTHER CODE' });
+  await publish(maintainer, 'other-preview');
+  const search = await call(developer, 'search_patterns', { query: 'searchableuniqueconstraint' });
+  assert.equal(search.results.length, 2);
+  const selected = search.results.find(item => item.id === 'long-preview');
+  assert.deepEqual(selected, { id: 'long-preview', revision: 1, kind: original.kind,
+    title: original.title, problem: '😀'.repeat(PATTERN_PREVIEW_LENGTH), problem_truncated: true });
+  assert.equal('problem_truncated' in search.results.find(item => item.id === 'other-preview'), false);
+  const args = { context_id: testContexts.get(developer), id: selected.id, revision: selected.revision };
+  assert.deepEqual((await call(developer, 'get_pattern', args)).content, original);
+  await save(maintainer, 'long-preview', { problem: 'Replacement', robin_code: 'NEW CODE' }, 1);
+  // A newer draft does not invalidate the selected published revision.
+  assert.deepEqual((await call(developer, 'get_pattern', args)).content, original);
+  await publish(maintainer, 'long-preview', 2);
+  assert.equal((await developer.callTool({ name: 'get_pattern', arguments: args })).isError, true);
+  const refreshed = await call(developer, 'search_patterns', { query: 'Replacement' });
+  assert.equal(refreshed.results[0].revision, 2);
 });
 
 test('catalog failure is a tool error and leaves context and approved patterns usable', async t => {

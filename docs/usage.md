@@ -15,7 +15,7 @@ Successful tool results contain one JSON payload in a single MCP text content bl
 | Tool | Role | Purpose |
 | --- | --- | --- |
 | `get_development_context` | Both | Select a fixed mode, create/resume a persistent context and load up to 20 compatible global conventions |
-| `search_patterns` | Both | Retrieve compatible approved patterns using required `context_id`, with optional area/kind filters |
+| `search_patterns` | Both | Find previews of compatible approved patterns using required `context_id`, with optional area/kind filters |
 | `get_pattern` | Both | Read a compatible published entry using `context_id`; Maintainers can explicitly request maintenance review |
 | `search_actions` | Both | Search the context's catalog by keywords/module; retrieve a complete action by exact `action_id` |
 | `search_type_reference` | Both | Search type summaries or retrieve formatting by exact `type_name` |
@@ -88,6 +88,12 @@ Choose the operation that matches the request:
 Replacement reuses the ID so references keep pointing to the maintained pattern. Permanent deletion can leave IDs mentioned in recipes unresolved; dependency text is not a managed foreign-key graph in this release.
 
 A revision conflict rejects the operation. Read the current state before retrying, including when a network failure leaves the outcome unknown. Replacement does not create a new identity or merge entries with different IDs.
+
+## Find and retrieve a snippet
+
+Search returns at most three previews by default (maximum ten): `id`, `revision`, `kind`, `title` and `problem`. The problem excerpt is capped at 600 Unicode code points; `problem_truncated: true` appears only when shortened. Code and detailed constraints stay out of search responses. Full content remains indexed and area/kind/mode filters still apply.
+
+Choose the relevant preview, then call `get_pattern({ context_id, id, revision })` to retrieve its original code and complete usage constraints. There is no need to fetch every search result. If the selected revision has since been replaced or withdrawn, retrieval fails: search again instead of silently using a different revision. Global conventions in the initial context and portable exports still contain full content.
 
 ## Initial context
 
