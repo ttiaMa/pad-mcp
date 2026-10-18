@@ -131,7 +131,7 @@ test('CLI changes are visible to a running server and developer keys cannot invo
   const body = await forbidden.json();
   assert.ok(body.error || body.result?.isError);
   const context = await request(key.token, 'tools/call', { name: 'get_development_context', arguments: { power_fx: 'enabled' } });
-  assert.equal((await context.json()).result.structuredContent.status, 'ready');
+  assert.equal(JSON.parse((await context.json()).result.content[0].text).status, 'ready');
   await assert.rejects(cli('disable', '--id', key.id));
   assert.equal((await request(key.token, 'tools/list')).status, 200);
   assert.deepEqual(await cli('delete', '--id', key.id), { id: key.id, deleted: true });

@@ -26,7 +26,7 @@ export const authoringGuidance = [
 ];
 
 function result(data) {
-  return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data };
+  return { content: [{ type: 'text', text: JSON.stringify(data) }] };
 }
 
 function buildMcp(store, role, catalogCache, usage, keyId) {

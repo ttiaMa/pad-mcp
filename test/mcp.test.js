@@ -21,6 +21,13 @@ import { documents, writeBundle } from './fixtures/catalog.js';
 const config = { maintainerToken: 'a'.repeat(48), publicUrl: 'http://localhost:8080' };
 const code = "\r\nSET Example TO $fx'=1'\r\n  # Unicode preservation fixture: café ☕\r\n";
 const content = (extra = {}) => contentSchema.parse({ title: 'Pagination example', problem: 'Divide a list into batches', robin_code: code, tags: ['pagination'], power_fx: 'enabled', ...extra });
+function toolData(response) {
+  assert.equal(response.structuredContent, undefined);
+  assert.equal(response.content.length, 1);
+  assert.equal(response.content[0].type, 'text');
+  return JSON.parse(response.content[0].text);
+}
+
 const testContexts = new WeakMap();
 const testRoles = new WeakMap();
 
@@ -44,7 +51,7 @@ async function setup(t, dependencies = { catalogCache: { checkForUpdates: async 
     }));
     const context = await client.callTool({ name: 'get_development_context', arguments: { power_fx: 'enabled' } });
     assert.ok(!context.isError);
-    testContexts.set(client, context.structuredContent.context_id);
+    testContexts.set(client, toolData(context).context_id);
     testRoles.set(client, token === config.maintainerToken ? 'maintainer' : 'developer');
     return client;
   }
@@ -61,7 +68,7 @@ async function call(client, name, args = {}) {
   }
   const response = await client.callTool({ name, arguments: args });
   assert.ok(!response.isError, JSON.stringify(response));
-  return response.structuredContent;
+  return toolData(response);
 }
 async function save(client, id, extra = {}, revision = 0) {
   return call(client, 'save_draft', { id, expected_revision: revision, content: content(extra) });
@@ -203,8 +210,8 @@ test('development content stays lean through MCP schemas, storage, retrieval and
     assert.deepEqual((await call(client, 'get_pattern', { id: 'lean' })).content, original);
     // Full content remains searchable server-side, including limitations.
     const response = await client.callTool({ name: 'search_patterns', arguments: { query: 'limitationuniqueterm', context_id: testContexts.get(client) } });
-    assert.deepEqual(response.structuredContent.results[0].content, original);
-    assert.deepEqual(JSON.parse(response.content[0].text), response.structuredContent);
+    assert.deepEqual(toolData(response).results[0].content, original);
+    assert.deepEqual(JSON.parse(response.content[0].text), toolData(response));
     assert.deepEqual((await call(client, 'get_development_context')).conventions[0].content, original);
     const exported = await call(client, 'export_knowledge');
     assert.equal(exported.schema_version, 2);
@@ -383,8 +390,8 @@ test('MCP selection is explicit, context mode is immutable and development canno
   const { maintainer, developer, store } = await setup(t);
   const initialCount = store.db.prepare('SELECT COUNT(*) AS n FROM development_contexts').get().n;
   const initial = await developer.callTool({ name: 'get_development_context', arguments: {} });
-  assert.equal(initial.structuredContent.status, 'selection_required');
-  assert.equal('conventions' in initial.structuredContent, false);
+  assert.equal(toolData(initial).status, 'selection_required');
+  assert.equal('conventions' in toolData(initial), false);
   assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM development_contexts').get().n, initialCount);
   const classic = await call(developer, 'get_development_context', { power_fx: 'disabled' });
   const fx = await call(developer, 'get_development_context', { power_fx: 'enabled' });
@@ -421,7 +428,7 @@ test('MCP selection is explicit, context mode is immutable and development canno
   // Maintainer development is also filtered and must not return newer drafts.
   await save(maintainer, 'enabled', { power_fx: 'disabled', robin_code: 'draft only' }, 1);
   const published = await maintainer.callTool({ name: 'get_pattern', arguments: { id: 'enabled', context_id: fx.context_id } });
-  assert.equal(published.structuredContent.revision, 1);
+  assert.equal(toolData(published).revision, 1);
   const wrongMode = await maintainer.callTool({ name: 'get_pattern', arguments: { id: 'enabled', context_id: classic.context_id } });
   assert.equal(wrongMode.isError, true);
   const review = await call(maintainer, 'get_pattern', { id: 'enabled', purpose: 'maintenance' });
@@ -518,8 +525,8 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
   assert.equal(proposal.repository, 'https://github.com/JoeG592/pad-robin-action-kb');
   assert.equal((await call(maintainer, 'get_development_context', {})).catalog_update.available_commit, 'b'.repeat(40));
   const selection = await maintainer.callTool({ name: 'get_development_context', arguments: {} });
-  assert.equal(selection.structuredContent.status, 'selection_required');
-  assert.equal(selection.structuredContent.catalog_update.status, 'update_available');
+  assert.equal(toolData(selection).status, 'selection_required');
+  assert.equal(toolData(selection).catalog_update.status, 'update_available');
   assert.equal('catalog_update' in fxPrompt, false);
   assert.equal('authoring_guidance' in fxPrompt, false);
   const developerTools = (await developer.listTools()).tools.map(tool => tool.name);

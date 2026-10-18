@@ -83,14 +83,14 @@ test('MCP usage is maintainer-only, content-free, excludes protocol traffic and 
     return { status: response.status, body: await response.json() };
   };
   const call = async (token, name, args = {}) => (await rpc(token, 'tools/call', { name, arguments: args })).body;
-  const report = async () => (await call(config.maintainerToken, 'get_usage_stats')).result.structuredContent;
+  const report = async () => JSON.parse((await call(config.maintainerToken, 'get_usage_stats')).result.content[0].text);
   assert.ok(!(await rpc(key.token, 'tools/list')).body.result.tools.some(tool => tool.name === 'get_usage_stats'));
   const denied = await call(key.token, 'get_usage_stats');
   assert.ok(denied.error || denied.result?.isError);
   assert.equal((await rpc('wrong', 'tools/list')).status, 401);
   await call(key.token, 'search_patterns', {}); // SDK validation rejects before handler.
   assert.equal((await report()).summary.calls, 0);
-  const context = (await call(key.token, 'get_development_context', { power_fx: 'enabled' })).result.structuredContent;
+  const context = JSON.parse((await call(key.token, 'get_development_context', { power_fx: 'enabled' })).result.content[0].text);
   await call(key.token, 'search_patterns', { context_id: context.context_id, query: 'PRIVATE_QUERY_SENTINEL' });
   await call(key.token, 'search_actions', { context_id: context.context_id, action_id: 'missing' });
   await call(key.token, 'search_type_reference', { context_id: context.context_id, query: 'missing' });
@@ -103,7 +103,7 @@ test('MCP usage is maintainer-only, content-free, excludes protocol traffic and 
   assert.ok(!JSON.stringify(rows).includes(key.token));
   assert.deepEqual(Object.keys(rows[0]).sort(), ['day','key_id','tool','mode','calls','successes','errors','empty_results'].sort());
   store.db.exec("CREATE TRIGGER fail_usage BEFORE INSERT ON usage_daily BEGIN SELECT RAISE(ABORT, 'test failure'); END;");
-  assert.equal((await call(key.token, 'get_development_context', {})).result.structuredContent.status, 'selection_required');
+  assert.equal(JSON.parse((await call(key.token, 'get_development_context', {})).result.content[0].text).status, 'selection_required');
   assert.equal((await report()).recording_failures_since_start, 1);
   assert.equal((await report()).summary.calls, 5);
   assert.throws(() => validateConfig({ ...config, usageRetentionDays: 0 }), /USAGE_RETENTION_DAYS/);

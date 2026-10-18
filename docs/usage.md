@@ -8,6 +8,8 @@ Follow the [Codex and Claude Code setup instructions](setup.md#connect-codex-or-
 
 The server asks the agent to load context first and retrieve relevant patterns before implementation. Actual tool use depends on the agent and client. For RPA migration, the agent interprets the source logic and searches for the PAD implementation needs individually, such as batching, retries or Excel handling. Validate the resulting flow in PAD.
 
+Successful tool results contain one JSON payload in a single MCP text content block. Programmatic clients read it with `JSON.parse(result.content[0].text)`. The server does not duplicate it in `structuredContent`. Tool errors use `isError: true` and a text message.
+
 ## Tools and roles
 
 | Tool | Role | Purpose |
