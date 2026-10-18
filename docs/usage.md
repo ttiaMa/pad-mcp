@@ -119,7 +119,7 @@ Use `search_type_reference` with `{"context_id":"<returned UUID>","type_name":"S
 
 Search returns five summaries by default (maximum twenty), total match count and a truncation flag. Exact lookup returns one full record or `record: null`; do not combine an exact ID with query/module filters. Action detail includes relevant edition rules and Power Fx runtime caveats. It does not include the entire catalog or repeat the initial prompt.
 
-The source object identifies upstream repository, version, PAD build, commit, edition, license and cache status. `bundled` identifies the bundled catalogs and `approved` an activated snapshot. `stale` reports an update-check or recovery error while a validated local or bundled pair is still available. With no valid local or bundled pair, the tool returns an error; snippet and context tools remain available. Catalog content is separate from the team's published knowledge and is never automatically approved or imported.
+Catalog lookups omit provenance metadata. Attribution remains in the project documentation and bundled files. With no valid local or bundled pair, the tool returns an error; snippet tools remain available. Catalog content is separate from the team's published knowledge and is never automatically approved or imported.
 
 `get_development_context` returns the locally reviewed `development_prompt` only after mode selection, without requiring a network call. Shared guidance plus one edition-specific file are loaded from `src/prompts`; restart the server after editing them. Catalog updates do not overwrite these prompts. The agent should distinguish approved originals, adapted code, upstream paste validation and actual PAD execution evidence.
 

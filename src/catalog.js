@@ -29,8 +29,6 @@ export const actionLookup = z.object({
 export const typeLookup = z.object({ ...lookup, type_name: text.optional() }).strict()
   .refine(a => !!a.type_name !== !!a.query, 'Supply either type_name or query.');
 
-export const CATALOG_REPOSITORY = 'https://github.com/JoeG592/pad-robin-action-kb';
-
 export function catalogFiles(powerFx) {
   modeSchema.parse(powerFx);
   const suffix = powerFx === 'enabled' ? '_PowerFx' : '';
@@ -87,12 +85,9 @@ export class CatalogIndex {
   #pair;
   #actions;
   #types;
-  #source;
 
-  constructor(input, { commit = null, checked_at = null, cache_status = 'not_managed', refresh_error = null } = {}) {
+  constructor(input) {
     this.#pair = parseCatalogPair(input);
-    this.#source = { repository: CATALOG_REPOSITORY, commit, checked_at, cache_status,
-      ...(refresh_error ? { refresh_error } : {}) };
     this.#actions = this.#pair.actions.actions.map(record => indexRecord(record, record.actionId, [
       record.actionId, record.module, record.selector ?? '', record.description ?? '',
       ...record.input_params.flatMap(p => [p.name, p.type]),
@@ -102,24 +97,17 @@ export class CatalogIndex {
       [record.type, record.category, record.description]));
   }
 
-  #metadata(kind) {
-    return { ...this.#source, power_fx: this.#pair.power_fx,
-      file: catalogFiles(this.#pair.power_fx)[kind], version: this.#pair[kind].version,
-      pad_build: this.#pair.actions.pad_build, license: this.#pair[kind].license };
-  }
-
   searchActions(args) {
     const { action_id, query, module, max_results } = actionLookup.parse(args);
-    const source = this.#metadata('actions');
     if (action_id) {
       const record = this.#actions.find(item => item.id === action_id)?.record;
-      return structuredClone({ source, record: record ?? null,
+      return structuredClone({ record: record ?? null,
         reference_rules: { types: this.#pair.types.rules,
           ...(this.#pair.actions.power_fx ? { power_fx: this.#pair.actions.power_fx } : {}) } });
     }
     const candidates = module ? this.#actions.filter(item => item.record.module.toLowerCase() === module.toLowerCase()) : this.#actions;
     const matches = rank(candidates, query);
-    return { source, total_matches: matches.length, truncated: matches.length > max_results,
+    return { total_matches: matches.length, truncated: matches.length > max_results,
       results: matches.slice(0, max_results).map(({ record }) => ({
         actionId: record.actionId, module: record.module, kind: record.kind, selector: record.selector,
         input_names: record.input_params.map(p => p.name),
@@ -129,13 +117,12 @@ export class CatalogIndex {
 
   searchTypes(args) {
     const { type_name, query, max_results } = typeLookup.parse(args);
-    const source = this.#metadata('types');
     if (type_name) {
       const record = this.#types.find(item => item.id === type_name)?.record;
-      return structuredClone({ source, record: record ?? null, rules: this.#pair.types.rules });
+      return structuredClone({ record: record ?? null, rules: this.#pair.types.rules });
     }
     const matches = rank(this.#types, query);
-    return { source, total_matches: matches.length, truncated: matches.length > max_results,
+    return { total_matches: matches.length, truncated: matches.length > max_results,
       results: matches.slice(0, max_results).map(({ record }) => ({
         type: record.type, category: record.category, description: record.description
       })) };

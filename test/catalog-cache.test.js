@@ -4,7 +4,6 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CatalogCache, CHECK_INTERVAL_MS } from '../src/catalog-cache.js';
-import { CATALOG_REPOSITORY } from '../src/catalog.js';
 import { documents, writeBundle } from './fixtures/catalog.js';
 
 async function fixture(t, options = {}) {
@@ -48,7 +47,7 @@ async function fixture(t, options = {}) {
   };
 }
 const detail = index => index.searchActions({ action_id: 'Text.Action0' });
-const baseline = async cache => detail(await cache.get('disabled')).source.commit;
+const baseline = async cache => detail(await cache.get('disabled')).record.golden_example.split('-').at(-1).repeat(40);
 
 test('both real bundled editions are available on first use without network or a writable cache', async () => {
   const cache = new CatalogCache({ directory: 'unused',
@@ -58,8 +57,7 @@ test('both real bundled editions are available on first use without network or a
     const index = await cache.get(mode);
     const actions = index.searchActions({ module: 'Text' });
     assert.ok(actions.total_matches > 5);
-    assert.equal(actions.source.cache_status, 'bundled');
-    assert.match(actions.source.commit, /^[a-f0-9]{40}$/);
+    assert.equal('source' in actions, false);
     assert.ok(index.searchTypes({ type_name: 'String' }).record);
   }
   await assert.rejects(cache.get('../elsewhere'));
@@ -72,7 +70,7 @@ test('coalesces daily checks for both editions, persists cadence across restart 
   f.version('b');
   const statuses = await Promise.all(Array.from({ length: 10 }, () => f.cache.checkForUpdates()));
   assert.equal(f.urls.length, 1);
-  assert.equal(statuses[0].repository, CATALOG_REPOSITORY);
+  assert.equal('repository' in statuses[0], false);
   assert.equal(statuses[0].status, 'update_available');
   assert.equal(statuses[0].available_commit, 'b'.repeat(40));
   assert.equal(await baseline(f.cache), 'a'.repeat(40));
@@ -153,7 +151,7 @@ test('restart recovers previous snapshot offline, retaining it as the next prede
   f.fail(() => new Response('', { status: 503 }));
   const recovered = f.restart();
   assert.equal(await baseline(recovered), 'b'.repeat(40));
-  assert.equal(detail(await recovered.get('enabled')).source.cache_status, 'stale');
+  assert.ok((await recovered.checkForUpdates()).recovery_error);
   f.fail(null); f.version('d'); f.advance();
   await f.approve(recovered);
   assert.equal((await f.manifest()).previous, before.previous);

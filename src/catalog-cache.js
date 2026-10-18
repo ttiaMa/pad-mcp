@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { CatalogIndex, CATALOG_REPOSITORY, catalogFiles, parseCatalogPair } from './catalog.js';
+import { CatalogIndex, catalogFiles, parseCatalogPair } from './catalog.js';
 
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
 const manifestSchema = z.object({ active: z.string().uuid(), previous: z.string().uuid().nullable() });
@@ -117,24 +117,20 @@ export class CatalogCache {
   async get(mode) {
     catalogFiles(mode);
     await this.#ready();
-    const error = this.#recoveryError ?? this.#check?.error;
-    return new CatalogIndex(this.#snapshot.pairs[mode], {
-      commit: this.#snapshot.metadata.commit, checked_at: this.#check?.checked_at ?? null,
-      cache_status: error ? 'stale' : this.#snapshot.id ? 'approved' : 'bundled', refresh_error: error
-    });
+    return new CatalogIndex(this.#snapshot.pairs[mode]);
   }
 
   #status() {
     const baseline = this.#snapshot.metadata.commit;
     const pending = this.#check?.latest_commit && this.#check.latest_commit !== baseline;
     return {
-      status: pending ? 'update_available' : 'current', repository: CATALOG_REPOSITORY,
+      status: pending ? 'update_available' : 'current',
       baseline_commit: baseline, available_commit: pending ? this.#check.latest_commit : null,
       checked_at: this.#check?.checked_at ?? null,
       check_error: this.#check?.error ?? null, recovery_error: this.#recoveryError,
       ...(pending ? { approval_required: true,
-        message: `Updated PAD references are available at ${CATALOG_REPOSITORY}. Would you like to replace the locally saved Classic and Power Fx JSON catalogs?`,
-        instructions: 'Show the repository link and ask the maintainer for approval. Only after explicit approval call update_catalogs with available_commit as expected_commit and confirmed=true. If declined, keep the current catalogs.' } : {})
+        message: 'Updated PAD references are available. Would you like to replace the locally saved Classic and Power Fx JSON catalogs?',
+        instructions: 'Ask the maintainer for approval. Only after explicit approval call update_catalogs with available_commit as expected_commit and confirmed=true. If declined, keep the current catalogs.' } : {})
     };
   }
 

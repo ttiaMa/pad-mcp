@@ -513,7 +513,7 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
   for (const [id, mode] of [[fx, 'enabled'], [classic, 'disabled']]) {
     const exact = await call(developer, 'search_actions', { context_id: id, action_id: 'Text.Action0' });
     assert.equal(exact.record.golden_example, mode + '-a');
-    assert.equal(exact.source.power_fx, mode);
+    assert.equal('source' in exact, false);
     assert.equal('development_prompt' in exact, false);
     assert.equal('power_fx' in exact.reference_rules, mode === 'enabled');
     const type = await call(developer, 'search_type_reference', { context_id: id, type_name: 'String' });
@@ -522,7 +522,7 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
   // Only maintainer contexts/status expose the proposal, including before mode selection.
   const proposal = (await call(maintainer, 'get_development_context')).catalog_update;
   assert.equal(proposal.status, 'update_available');
-  assert.equal(proposal.repository, 'https://github.com/JoeG592/pad-robin-action-kb');
+  assert.equal('repository' in proposal, false);
   assert.equal((await call(maintainer, 'get_development_context', {})).catalog_update.available_commit, 'b'.repeat(40));
   const selection = await maintainer.callTool({ name: 'get_development_context', arguments: {} });
   assert.equal(toolData(selection).status, 'selection_required');
@@ -545,13 +545,13 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
   assert.equal(requests, 5);
   for (const context_id of [fx, classic]) {
     const active = await call(developer, 'search_actions', { context_id, action_id: 'Text.Action0' });
-    assert.equal(active.source.commit, 'b'.repeat(40));
+    assert.equal('source' in active, false);
   }
   offline = true; now += 24 * 3600000;
   await call(maintainer, 'get_catalog_update_status');
   const stale = await call(developer, 'search_actions', { context_id: fx, action_id: 'Text.Action0' });
-  assert.equal(stale.source.cache_status, 'stale');
-  assert.ok(stale.source.refresh_error);
+  assert.equal('source' in stale, false);
+  assert.ok((await call(maintainer, 'get_catalog_update_status')).check_error);
   assert.equal(store.export({}).entries.length, 0); // Catalog never becomes approved knowledge.
   const restarted = new CatalogCache({ directory, bundle_directory, fetch, now: () => now });
   assert.equal((await restarted.get('enabled')).searchTypes({ type_name: 'String' }).record.example, 'enabled-b');

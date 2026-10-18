@@ -65,14 +65,12 @@ test('action search is compact, bounded, deterministic and supports module-only 
   assert.equal(index.searchActions({ module: 'Text', max_results: 20 }).results.length, 7);
 });
 
-test('exact lookup returns the complete original record, with provenance and no fabricated match', () => {
+test('exact lookup returns the complete original record, without provenance or fabricated matches', () => {
   const input = fixture();
-  const index = new CatalogIndex(input, { commit: 'abc', checked_at: '2026-10-14T00:00:00Z', cache_status: 'fresh' });
+  const index = new CatalogIndex(input);
   const result = index.searchActions({ action_id: 'Text.JoinText.Variant6' });
   assert.deepEqual(result.record, input.actions.actions[6]);
-  assert.equal(result.source.commit, 'abc');
-  assert.equal(result.source.file, 'PAD_Robin_ActionKB.json');
-  assert.equal(result.source.license, 'CC BY 4.0');
+  assert.equal('source' in result, false);
   assert.equal(index.searchActions({ action_id: 'text.jointext.variant6' }).record, null);
   result.record.extra.retained = false;
   input.actions.actions[6].extra.retained = false;
@@ -95,7 +93,7 @@ test('Classic and Power Fx indexes never share examples or metadata', () => {
     const index = new CatalogIndex(fixture(mode));
     assert.equal(index.searchActions({ action_id: 'Text.JoinText.Variant0' }).record.golden_example, `${mode} example 0`);
     assert.equal(index.searchTypes({ type_name: 'String' }).record.example, `${mode} string`);
-    assert.equal(index.searchTypes({ query: 'text' }).source.power_fx, mode);
+    assert.equal('source' in index.searchTypes({ query: 'text' }), false);
   }
 });
 

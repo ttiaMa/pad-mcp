@@ -2,13 +2,13 @@
 
 ## Stage 1: local parser and lookup
 
-`src/catalog.js` provides a local-only parser and index for the Classic and Power Fx editions of [JoeG592/pad-robin-action-kb](https://github.com/JoeG592/pad-robin-action-kb). Upstream catalog content is licensed CC BY 4.0. Lookup responses retain attribution and the upstream version and declared PAD build. Update tests use synthetic records; a separate offline test verifies the actual bundled catalogs.
+`src/catalog.js` provides a local-only parser and index for the Classic and Power Fx editions of [JoeG592/pad-robin-action-kb](https://github.com/JoeG592/pad-robin-action-kb). Upstream catalog content is licensed CC BY 4.0. Attribution and version provenance remain in the bundled files and this documentation; tool responses omit source metadata. Update tests use synthetic records; a separate offline test verifies the actual bundled catalogs.
 
 The parser itself does not register MCP tools, download or cache files, create development contexts, or modify the knowledge database.
 
 `parseCatalogPair({ actions, types, power_fx })` accepts JSON strings or parsed documents. It validates required record fields, nonempty collections, unique identifiers and matching editions. It preserves additional upstream fields and allows action and type documents to have different version numbers. Classic currently omits `edition`; Power Fx must declare `power-fx`. Validation does not establish that the two documents came from the same commit; the loader supplies that guarantee using an immutable commit SHA.
 
-`new CatalogIndex(input, source)` accepts the same pair and optional `commit`, `checked_at` and `cache_status` provenance. Until supplied by a loader, these are null or `not_managed`, not a claim of freshness.
+`new CatalogIndex(input)` accepts the same pair without provenance metadata.
 
 - `searchActions({ query?, module?, max_results? })` searches names, modules, descriptions and parameter names/types. A module-only request browses that module. Module matching is case-insensitive and exact.
 - `searchActions({ action_id })` returns the complete exact record or `record: null`. IDs are case-sensitive. It cannot be combined with query/module filters.
@@ -27,7 +27,7 @@ The application and Docker image include all four original upstream JSON files i
 
 The entrypoint starts a background check at startup and then every 24 hours, including when there is no chat traffic. One shared GitHub `main` check covers both editions. Successful and failed checks persist their timestamp in `check.json`; a restart waits for the remaining interval. Maintainer context/status requests also perform a check when due, sharing the same serialized operation. Checks only resolve the repository commit; they never download or install catalog JSON. Failures retain any pending proposal and the current baseline.
 
-When the upstream SHA differs from the active baseline, `get_development_context` returns `catalog_update` only to Maintainers, even before selecting a PAD mode. The agent is instructed to show the repository URL (not individual file links) and ask whether to replace the local catalogs. Developers receive neither the proposal nor update tools. `get_catalog_update_status` allows a Maintainer to revisit the proposal. Declining leaves the current catalogs in use; the pending proposal remains available in later chats.
+When the upstream SHA differs from the active baseline, `get_development_context` returns `catalog_update` only to Maintainers, even before selecting a PAD mode. The agent is instructed to ask whether to replace the local catalogs. Developers receive neither the proposal nor update tools. `get_catalog_update_status` allows a Maintainer to revisit the proposal. Declining leaves the current catalogs in use; the pending proposal remains available in later chats.
 
 Only the Maintainer-only `update_catalogs` tool can activate a remote snapshot. It requires `confirmed: true` and the exact offered `expected_commit`. A changed proposal requires fresh approval. The download pins all four stable filenames to that immutable SHA, validates both editions and verifies checksums before atomically switching one manifest for the complete snapshot. An upstream change after the proposal cannot change the approved download. Repeated approval of an already active commit is idempotent. Successful activation makes that commit the new baseline for subsequent daily checks.
 
@@ -35,7 +35,7 @@ Approved snapshots live in UUID directories under `CATALOG_CACHE_PATH`. Each con
 
 At restart, invalid active data falls back to the previous complete snapshot, then to the bundled catalogs. An unreadable manifest never causes arbitrary directories to be promoted. Failed downloads, schema checks, writes or activation leave the active manifest authoritative, and a later explicit approval can retry the pending update. These are filesystem rename/process-crash guarantees, not backups against volume loss or hardware failure. Legacy per-edition auto-refresh caches are left on disk but are not imported as approved snapshots: installations start from the bundled baseline until a Maintainer approves an update.
 
-Network requests use fixed GitHub endpoints, no credentials, rejected redirects, a 15-second per-request timeout and a 10 MiB per-response streaming bound. A check failure does not prevent local lookups; responses expose `cache_status: stale` and `refresh_error`. Otherwise source status is `bundled` or `approved`, describing the active data rather than claiming it matches upstream. Update proposals and check errors are reported separately to Maintainers. Only a failure to load both local and bundled data makes catalog tools unavailable; the knowledge database is independent.
+Network requests use fixed GitHub endpoints, no credentials, rejected redirects, a 15-second per-request timeout and a 10 MiB per-response streaming bound. A check failure does not prevent local lookups; lookup responses contain only development data. Update proposals and check errors are reported separately to Maintainers. Only a failure to load both local and bundled data makes catalog tools unavailable; the knowledge database is independent.
 
 ## Stage 3: fixed-mode development contexts
 
