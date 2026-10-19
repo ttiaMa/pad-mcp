@@ -61,6 +61,12 @@ test('both real bundled editions are available on first use without network or a
     assert.ok(index.searchTypes({ type_name: 'String' }).record);
     const typeDoc = JSON.parse(await fs.readFile(new URL(`../catalogs/PAD_Robin_TypeReference${mode === 'enabled' ? '_PowerFx' : ''}.json`, import.meta.url), 'utf8'));
     const actionDoc = JSON.parse(await fs.readFile(new URL(`../catalogs/PAD_Robin_ActionKB${mode === 'enabled' ? '_PowerFx' : ''}.json`, import.meta.url), 'utf8'));
+    assert.deepEqual(index.searchActions({ action_id: 'Access.CloseAccess' }).record.error_handling,
+      { on_error: true, errors: ['CloseAccessError'] });
+    assert.deepEqual(index.searchActions({ action_id: 'Clipboard.Clear' }).record.error_handling,
+      { on_error: false, errors: [] });
+    assert.deepEqual(index.searchActions({ action_id: 'File.WaitForFile.Created' }).record.error_handling,
+      { on_error: true, errors: [] });
     assert.deepEqual(index.developmentRules(), { types: typeDoc.rules, ...(actionDoc.power_fx ? { power_fx: actionDoc.power_fx } : {}) });
     const rules = index.developmentRules();
     rules.types.length = 0;

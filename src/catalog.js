@@ -2,13 +2,17 @@ import { z } from 'zod';
 
 const text = z.string().min(1);
 const parameter = z.object({ name: text, type: text }).passthrough();
+const errorHandling = z.object({
+  on_error: z.boolean(), errors: z.array(text)
+}).passthrough();
 const action = z.object({
   actionId: text, module: text,
   kind: z.enum(['Action', 'Condition', 'Wait', 'While']),
   selector: z.string().nullable(), template: text, golden_example: text,
   input_params: z.array(parameter), output_params: z.array(parameter),
   constraints: z.record(z.unknown()), sibling_selectors: z.array(text),
-  needs_ui_selector: z.boolean(), validation: text
+  needs_ui_selector: z.boolean(), validation: text,
+  error_handling: errorHandling.optional()
 }).passthrough();
 const type = z.object({ type: text, category: text, example: text, description: text }).passthrough();
 const header = z.object({

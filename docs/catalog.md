@@ -19,6 +19,10 @@ Search defaults to five compact results, with a maximum of twenty, a total match
 
 Only exact detail requests include templates, golden examples or type examples. Returned details are detached copies so callers cannot mutate the index. Upstream paste-validation statements are preserved as source claims, not execution guarantees for generated flows.
 
+Action records may include `error_handling: { on_error, errors }`. The parser validates the boolean support flag and array of nonempty error names when present, while accepting older catalogs without this field. Missing metadata means unknown support; an empty `errors` array does not imply `on_error: false`. Exact lookups preserve this metadata, while search summaries remain unchanged. Shared guidance explains named handlers and preserves existing subflow-level error handling rather than adding local handlers by default.
+
+Error-handler guidance was reviewed against upstream [Classic PROMPT.md](https://github.com/JoeG592/pad-robin-action-kb/blob/0365052300d76f85ea1d2db5baca8048ae252934/PROMPT.md) and [PROMPT_PowerFx.md](https://github.com/JoeG592/pad-robin-action-kb/blob/0365052300d76f85ea1d2db5baca8048ae252934/PROMPT_PowerFx.md). It includes retry/named/default ordering, a shared closing `END`, and handler statement restrictions. The project's prompts remain adapted to selective MCP retrieval and team conventions; catalog updates do not automatically replace them.
+
 ## Stage 2: persistent catalog cache
 
 `new CatalogCache({ directory })` from `src/catalog-cache.js` supplies `await cache.get('enabled' | 'disabled')`, returning a `CatalogIndex`. The running server shares one instance across requests and roles. The entrypoint uses `CATALOG_CACHE_PATH`, defaulting beside the database; Compose keeps it inside the persistent data volume.

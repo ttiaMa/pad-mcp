@@ -49,6 +49,38 @@ test('rejects invalid JSON, incomplete structures, duplicates, empty and mixed-e
   assert.throws(() => parseCatalogPair(input));
 });
 
+test('error metadata supports both editions and legacy records without expanding search summaries', () => {
+  for (const mode of ['disabled', 'enabled']) {
+    const input = fixture(mode);
+    const legacy = new CatalogIndex(input);
+    const cases = [
+      { on_error: true, errors: ['ReadError', 'WriteError'] },
+      { on_error: true, errors: [] },
+      { on_error: false, errors: [] }
+    ];
+    for (const [i, metadata] of cases.entries()) input.actions.actions[i].error_handling = metadata;
+    const index = new CatalogIndex(input);
+    assert.deepEqual(index.searchActions({ module: 'Text' }), legacy.searchActions({ module: 'Text' }));
+    for (const [i, metadata] of cases.entries()) {
+      const result = index.searchActions({ action_id: input.actions.actions[i].actionId });
+      assert.deepEqual(result.record.error_handling, metadata);
+      result.record.error_handling.errors.push('Mutated');
+      assert.deepEqual(index.searchActions({ action_id: result.record.actionId }).record.error_handling, metadata);
+    }
+    assert.equal('error_handling' in index.searchActions({ action_id: input.actions.actions[3].actionId }).record, false);
+  }
+});
+
+test('rejects malformed error metadata instead of passing unvalidated support claims to callers', () => {
+  for (const metadata of [null, {}, { on_error: 'false', errors: [] },
+    { on_error: true }, { on_error: true, errors: 'ReadError' },
+    { on_error: true, errors: [42] }, { on_error: true, errors: [''] }]) {
+    const input = fixture();
+    input.actions.actions[0].error_handling = metadata;
+    assert.throws(() => parseCatalogPair(input));
+  }
+});
+
 test('action search is compact, bounded, deterministic and supports module-only browsing', () => {
   const index = new CatalogIndex(fixture());
   const result = index.searchActions({ query: 'join text', module: 'text' });
