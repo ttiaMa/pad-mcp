@@ -71,7 +71,7 @@ test('MCP usage is maintainer-only, content-free, excludes protocol traffic and 
   const store = new KnowledgeStore(':memory:');
   const key = new ApiKeys(store.db).create('Roby');
   const config = { maintainerToken: 'm'.repeat(48), publicUrl: 'http://localhost:8080' };
-  const app = createApp(store, config, { catalogCache: { checkForUpdates: async () => ({ status: 'current' }),
+  const app = createApp(store, config, { catalogCache: {
     get: async () => ({ developmentRules: () => ({ types: [] }), searchActions: () => ({ record: null }), searchTypes: () => ({ results: [] }) }) } });
   const listener = app.listen(0, '127.0.0.1');
   await once(listener, 'listening');

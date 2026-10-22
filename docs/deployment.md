@@ -2,7 +2,7 @@
 
 ## Architecture
 
-One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index, persistent development contexts and Developer API key hashes and metadata. No AI provider or remote database is required. Catalog lookups work offline. Daily update checks use outbound HTTPS to `api.github.com`; only Maintainer-approved updates download JSON from `raw.githubusercontent.com`. No credentials are sent to GitHub.
+One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index, persistent development contexts and Developer API key hashes and metadata. No AI provider or remote database is required. Catalog lookups work offline. The server makes no outbound requests for catalogs.
 
 Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8080. The container runs as the unprivileged `node` user. The image uses Node 24; `npm ci` installs the exact dependency versions in the lockfile. Validate base-image updates before deployment.
 
@@ -17,7 +17,6 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 | `HOST` | Local default `127.0.0.1`; container uses `0.0.0.0` |
 | `PORT` | Application port; Compose uses 8080 |
 | `DATABASE_PATH` | Local `./data/knowledge.sqlite`; container `/app/data/knowledge.sqlite` |
-| `CATALOG_CACHE_PATH` | Optional; defaults to `catalog-cache` beside the database. Compose uses `/app/data/catalog-cache` in the same persistent volume |
 
 The application rejects missing Maintainer credentials or values shorter than 32 characters. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer key cannot mutate knowledge, but can create development contexts.
 
@@ -32,7 +31,6 @@ The application rejects missing Maintainer credentials or values shorter than 32
 | `HOST` | `127.0.0.1` | Fixed at `0.0.0.0` |
 | `PORT` | `8080` | Fixed at `8080` |
 | `DATABASE_PATH` | `./data/knowledge.sqlite` | Fixed at `/app/data/knowledge.sqlite` |
-| `CATALOG_CACHE_PATH` | Empty; defaults beside the database | Fixed at `/app/data/catalog-cache` |
 | `USAGE_STATS_ENABLED` | `true` | Configurable; defaults to `true` |
 | `USAGE_RETENTION_DAYS` | `90` | Configurable; defaults to `90` |
 
@@ -54,15 +52,13 @@ The database is stored on the `knowledge_data` volume at `/app/data/knowledge.sq
 
 Schemas 2–5 upgrade to schema 6. Earlier migrations add development contexts, Developer keys, daily usage counters and last-use timestamps as needed. Schema 6 removes the obsolete key status column and import marker. Previously disabled keys and their counters are deleted so they cannot regain access; active keys, their statistics, snippets, revisions, contexts and the knowledge seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only schemas 2–5 cannot open schema 6: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys or usage statistics. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
 
-### Catalog persistence and outages
+### Bundled catalogs
 
-The application and Docker image bundle the Classic and Power Fx action/type JSON files. Both editions are available immediately, including offline. A shared background checker inspects upstream `main` once every 24 hours, persisting its cadence across restarts. Detection never activates an update. At the next Maintainer chat, after mode selection, the context response asks the agent to obtain approval; Developer chats have no update prompt or update tool.
+The application and Docker image bundle the Classic and Power Fx action/type JSON files. Both editions are available offline and checked against their bundled SHA-256 metadata. There is no background checker, download mechanism or MCP update tool. To change versions, manually update the project bundle and release it; see [catalog maintenance](catalog.md#stage-2-bundled-catalogs).
 
-After approval, all four files from the offered commit are validated and activated as one persistent snapshot. This overrides the bundled baseline, survives restarts/redeploys, and becomes the baseline for future checks. The current and previous approved snapshots are retained with checksums. Failed downloads or writes keep the current snapshot. Startup can recover the previous snapshot or the bundle. Older per-edition auto-refresh cache directories are retained but ignored; no database migration or deletion is needed.
+Old catalog cache files are retained but ignored, and `CATALOG_CACHE_PATH` is no longer used. After upgrading, the installed bundle takes precedence over any previously downloaded snapshot. No database migration or deletion is required.
 
-Keep `CATALOG_CACHE_PATH` writable by the service user and on persistent storage; include it in backups. Without writable storage, the bundle remains readable but updates cannot be activated and check cadence cannot survive restarts. Use one process per directory. Requests have 15-second timeouts and a 10 MiB response bound. See [cache details](catalog.md#stage-2-persistent-catalog-cache).
-
-`/healthz` checks the knowledge database; it does not certify catalog freshness or PAD execution. Catalog responses report `cache_status`, commit, checked time and refresh errors. To verify a deployment, reconnect an MCP client, choose a mode, search an action and retrieve its exact record and a type. Then restart and repeat using the same context ID. The Dockerfile includes prompts through `COPY src` and all bundled catalogs through `COPY catalogs`.
+`/healthz` checks the knowledge database; it does not certify catalog validity or PAD execution. To verify a deployment, reconnect an MCP client, choose a mode, search an action and retrieve its exact record and a type. Then restart and repeat using the same context ID. The Dockerfile includes prompts through `COPY src` and all bundled catalogs through `COPY catalogs`.
 
 ### Request boundary
 

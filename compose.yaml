@@ -7,7 +7,6 @@ services:
       HOST: 0.0.0.0
       PORT: 8080
       DATABASE_PATH: /app/data/knowledge.sqlite
-      CATALOG_CACHE_PATH: /app/data/catalog-cache
       PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL to your HTTPS origin}
       MCP_MAINTAINER_TOKEN: ${MCP_MAINTAINER_TOKEN:?Set a random maintainer token of at least 32 characters}
       USAGE_STATS_ENABLED: ${USAGE_STATS_ENABLED:-true}

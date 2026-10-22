@@ -21,8 +21,6 @@ Successful tool results contain one JSON payload in a single MCP text content bl
 | `search_type_reference` | Both | Search type summaries or retrieve formatting by exact `type_name` |
 | `export_knowledge` | Both | Export all published entries |
 | `get_usage_stats` | Maintainer | Read aggregate Developer usage by day, tool, mode or key; see [Usage statistics](usage-statistics.md) |
-| `get_catalog_update_status` | Maintainer | Read the daily check and pending catalog proposal without activating it |
-| `update_catalogs` | Maintainer | After explicit approval, replace both local editions with the exact offered commit |
 | `list_patterns` | Maintainer | List IDs and current revisions, including drafts |
 | `save_draft` | Maintainer | Save a new immutable draft revision |
 | `publish_revision` | Maintainer | Publish the exact latest revision for the team |
@@ -33,11 +31,9 @@ Successful tool results contain one JSON payload in a single MCP text content bl
 
 Both roles use the same published collection. Development reads return compatible current published revisions. Maintainers can inspect drafts and history with `get_pattern` and `purpose: "maintenance"`, without `context_id`; the response is marked as maintenance content. Developers cannot invoke knowledge mutation tools or maintenance reads, even by name. Both roles may create development contexts. All access still requires authentication; a context ID grants no authorization.
 
-## Approve reference catalog updates
+## Reference catalog versions
 
-Classic and Power Fx references are bundled and available offline. The server checks the upstream repository once every 24 hours in the background. At the start of a Maintainer chat, call `get_development_context` (also for maintenance-only chats). Its `catalog_update` field reports any pending update and links to [the upstream repository](https://github.com/JoeG592/pad-robin-action-kb). The agent asks whether to replace the locally saved JSON files. Developer chats do not receive this proposal.
-
-If you approve, the agent calls `update_catalogs` with `{"expected_commit":"<available_commit from the proposal>","confirmed":true}`. The server downloads and validates all four files from that exact commit, then replaces both editions together. The saved update takes precedence over the bundle and becomes the baseline for subsequent checks. If the proposal has changed, review the new proposal before approving again. On failure the current catalogs remain available; retrying the same pending update requires an explicit tool call. Declining leaves the files unchanged and the proposal available for a later chat. `get_catalog_update_status` lets a Maintainer revisit it without bypassing the daily check interval.
+Classic and Power Fx references are bundled and available offline. Catalog versions change only when you manually incorporate a chosen upstream revision into the project and release it. There are no automatic checks, update proposals or MCP update tools. See [manual catalog maintenance](catalog.md#stage-2-bundled-catalogs).
 
 ## Add and approve
 
@@ -127,7 +123,7 @@ Search returns five summaries by default (maximum twenty), total match count and
 
 Catalog lookups omit provenance metadata. Attribution remains in the project documentation and bundled files. With no valid local or bundled pair, the tool returns an error; snippet tools remain available. Catalog content is separate from the team's published knowledge and is never automatically approved or imported.
 
-`get_development_context` returns the locally reviewed `development_prompt` only after mode selection, without requiring a network call. Shared guidance plus one edition-specific file are loaded from `src/prompts`, followed by the original rules from the active local catalog; restart the server after editing them. Catalog updates do not overwrite these prompt files. Reload the context after an update to obtain its current rules. If the catalog is unavailable, `catalog_error` explains the limitation while compatible snippet retrieval remains usable. The agent should distinguish approved originals, adapted code, upstream paste validation and actual PAD execution evidence.
+`get_development_context` returns the locally reviewed `development_prompt` only after mode selection, without requiring a network call. Shared guidance plus one edition-specific file are loaded from `src/prompts`, followed by the original rules from the active local catalog; restart the server after editing them. Catalog updates do not overwrite these prompt files. After deploying a manually updated bundle, reload the context to obtain its current rules. If the catalog is unavailable, `catalog_error` explains the limitation while compatible snippet retrieval remains usable. The agent should distinguish approved originals, adapted code, upstream paste validation and actual PAD execution evidence.
 
 ## Entry fields
 

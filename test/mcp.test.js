@@ -32,7 +32,7 @@ function toolData(response) {
 const testContexts = new WeakMap();
 const testRoles = new WeakMap();
 
-async function setup(t, dependencies = { catalogCache: { checkForUpdates: async () => ({ status: 'current' }), get: async mode => new CatalogIndex({ ...documents(mode, 'a'), power_fx: mode }) } }) {
+async function setup(t, dependencies = { catalogCache: { get: async mode => new CatalogIndex({ ...documents(mode, 'a'), power_fx: mode }) } }) {
   const store = new KnowledgeStore(':memory:');
   const developerToken = new ApiKeys(store.db).create('Test Developer').token;
   const listener = createApp(store, config, dependencies).listen(0, '127.0.0.1');
@@ -464,25 +464,13 @@ test('publication and replacement require classification and roll back without r
   assert.equal(store.get(imported.id, 'maintainer').published, false);
 });
 
-test('catalog MCP tools use shared persistent cache, selected edition and bounded responses', async t => {
+test('catalog MCP tools use bundled catalogs, selected edition and bounded responses', async t => {
   const directory = mkdtempSync(join(tmpdir(), 'pad-catalog-mcp-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  let requests = 0;
-  let now = Date.parse('2026-10-14T00:00:00Z');
-  let offline = false;
-  const fetch = async url => {
-    requests++;
-    if (offline) throw new Error('Simulated outage');
-    if (url.includes('api.github.com')) return Response.json({ sha: 'b'.repeat(40) });
-    const mode = url.includes('_PowerFx') ? 'enabled' : 'disabled';
-    const docs = documents(mode, 'b');
-    return Response.json(url.includes('TypeReference') ? docs.types : docs.actions);
-  };
   const bundle_directory = join(directory, 'bundle');
   await writeBundle(bundle_directory);
-  const catalogCache = new CatalogCache({ directory, bundle_directory, fetch, now: () => now });
+  const catalogCache = new CatalogCache({ bundle_directory });
   const { developer, maintainer, store } = await setup(t, { catalogCache });
-  assert.equal(requests, 1); // Maintainer context checks for updates, without downloading catalogs.
   const fx = testContexts.get(developer);
   const classic = (await call(developer, 'get_development_context', { power_fx: 'disabled' })).context_id;
   const fxPrompt = await call(developer, 'get_development_context', { context_id: fx });
@@ -504,10 +492,8 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
     ['search_type_reference', { context_id: fx, type_name: 'String', query: 'text' }],
     ['search_actions', { context_id: '00000000-0000-4000-8000-000000000000', query: 'text' }]
   ]) assert.equal((await developer.callTool({ name, arguments: args })).isError, true);
-  assert.equal(requests, 1);
   const summaries = await Promise.all([developer, maintainer].map(client =>
     call(client, 'search_actions', { context_id: fx, module: 'Text' })));
-  assert.equal(requests, 1);
   assert.equal(summaries[0].results.length, 5);
   assert.equal(summaries[0].truncated, true);
   assert.equal('golden_example' in summaries[0].results[0], false);
@@ -523,11 +509,7 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
     const type = await call(developer, 'search_type_reference', { context_id: id, type_name: 'String' });
     assert.equal(type.record.example, mode + '-a');
   }
-  // Only maintainer contexts/status expose the proposal, after mode selection.
-  const proposal = (await call(maintainer, 'get_development_context')).catalog_update;
-  assert.equal(proposal.status, 'update_available');
-  assert.equal('repository' in proposal, false);
-  assert.equal((await call(maintainer, 'get_development_context', {})).catalog_update.available_commit, 'b'.repeat(40));
+  assert.equal('catalog_update' in (await call(maintainer, 'get_development_context')), false);
   const selection = await maintainer.callTool({ name: 'get_development_context', arguments: {} });
   assert.equal(toolData(selection).status, 'selection_required');
   assert.deepEqual(Object.keys(toolData(selection)).sort(), ['question', 'status']);
@@ -537,32 +519,16 @@ test('catalog MCP tools use shared persistent cache, selected edition and bounde
   assert.equal('instructions' in fxPrompt, false);
   assert.equal('guidance' in fxPrompt, false);
   assert.equal(maintainer.getInstructions(), developer.getInstructions());
-  const developerTools = (await developer.listTools()).tools.map(tool => tool.name);
-  for (const name of ['get_catalog_update_status', 'update_catalogs']) {
-    assert.equal(developerTools.includes(name), false);
-    assert.equal((await developer.callTool({ name, arguments: { expected_commit: 'b'.repeat(40), confirmed: true } })).isError, true);
+  for (const client of [developer, maintainer]) {
+    const names = (await client.listTools()).tools.map(tool => tool.name);
+    for (const name of ['get_catalog_update_status', 'update_catalogs']) {
+      assert.equal(names.includes(name), false);
+      assert.equal((await client.callTool({ name, arguments: { expected_commit: 'b'.repeat(40), confirmed: true } })).isError, true);
+    }
   }
-  for (const args of [{ expected_commit: 'b'.repeat(40) }, { expected_commit: 'b'.repeat(40), confirmed: false },
-    { expected_commit: 'c'.repeat(40), confirmed: true }]) {
-    assert.equal((await maintainer.callTool({ name: 'update_catalogs', arguments: args })).isError, true);
-  }
-  assert.equal(requests, 1);
-  const updated = await call(maintainer, 'update_catalogs', { expected_commit: proposal.available_commit, confirmed: true });
-  assert.equal(updated.status, 'current');
-  assert.equal(updated.baseline_commit, 'b'.repeat(40));
-  assert.equal(requests, 5);
-  for (const context_id of [fx, classic]) {
-    const active = await call(developer, 'search_actions', { context_id, action_id: 'Text.Action0' });
-    assert.equal('source' in active, false);
-  }
-  offline = true; now += 24 * 3600000;
-  await call(maintainer, 'get_catalog_update_status');
-  const stale = await call(developer, 'search_actions', { context_id: fx, action_id: 'Text.Action0' });
-  assert.equal('source' in stale, false);
-  assert.ok((await call(maintainer, 'get_catalog_update_status')).check_error);
-  assert.equal(store.export({}).entries.length, 0); // Catalog never becomes approved knowledge.
-  const restarted = new CatalogCache({ directory, bundle_directory, fetch, now: () => now });
-  assert.equal((await restarted.get('enabled')).searchTypes({ type_name: 'String' }).record.example, 'enabled-b');
+  assert.equal(store.export({}).entries.length, 0);
+  const restarted = new CatalogCache({ bundle_directory });
+  assert.equal((await restarted.get('enabled')).searchTypes({ type_name: 'String' }).record.example, 'enabled-a');
 });
 
 test('pattern previews are bounded, preserve Unicode and retrieve only the selected published revision', async t => {
@@ -590,7 +556,7 @@ test('pattern previews are bounded, preserve Unicode and retrieve only the selec
 });
 
 test('catalog failure is a tool error and leaves context and approved patterns usable', async t => {
-  const { developer, maintainer } = await setup(t, { catalogCache: { checkForUpdates: async () => ({ status: 'current' }), get: async () => { throw new Error('Unavailable'); } } });
+  const { developer, maintainer } = await setup(t, { catalogCache: { get: async () => { throw new Error('Unavailable'); } } });
   const result = await developer.callTool({ name: 'search_actions', arguments: { context_id: testContexts.get(developer), query: 'text' } });
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /Catalog unavailable/);

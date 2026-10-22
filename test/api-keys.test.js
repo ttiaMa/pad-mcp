@@ -96,7 +96,7 @@ test('CLI changes are visible to a running server and developer keys cannot invo
   const path = fixture();
   const store = new KnowledgeStore(path);
   const app = createApp(store, { maintainerToken, publicUrl: 'http://localhost:8080' }, {
-    catalogCache: { checkForUpdates: async () => ({ status: 'current' }) }
+    catalogCache: {}
   });
   const listener = app.listen(0, '127.0.0.1');
   await once(listener, 'listening');

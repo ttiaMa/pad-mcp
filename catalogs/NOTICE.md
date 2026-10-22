@@ -4,4 +4,4 @@ These four JSON files are unmodified copies from [JoeG592/pad-robin-action-kb](h
 
 `metadata.json` records the immutable upstream commit, retrieval time and SHA-256 of each original file. Git preserves the JSON bytes across platforms so checksum validation also works after a Windows checkout. Both editions are parsed and verified before use.
 
-pad-mcp can use these catalogs immediately without GitHub access. Maintainer-approved updates are stored under `CATALOG_CACHE_PATH` and take precedence over this bundle; they do not rewrite the installed application or Docker image. See [catalog lifecycle](../docs/catalog.md#stage-2-persistent-catalog-cache).
+pad-mcp uses only these bundled catalogs, without GitHub access or automatic updates. New upstream revisions must be incorporated manually into the project and released. See [catalog maintenance](../docs/catalog.md#stage-2-bundled-catalogs).

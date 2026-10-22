@@ -14,7 +14,6 @@ import { UsageStats } from './usage.js';
 export const instructions = `Call get_development_context first. Ask the user to choose PAD Classic or Power Fx before supplying power_fx disabled or enabled. Reuse the returned context_id throughout the chat; never create another context to switch modes. Development guidance is returned after selection.`;
 
 export const authoringGuidance = [
-  'At the start of every maintainer chat call get_development_context, including for maintenance-only work. When catalog_update.status is update_available, ask whether to replace the local Classic and Power Fx JSON catalogs. Call update_catalogs only after explicit approval of the offered commit. If declined, continue with the existing catalogs. Never ask developers about catalog updates.',
   'Classify each entry as power_fx enabled, disabled, or either before publication. Use either only for explicitly established compatibility with both modes. Drafts may remain unspecified; do not infer compatibility or rewrite code to make it fit the current chat mode. Maintenance review can inspect entries from either mode.',
   'Before saving new knowledge, turn the supplied Robin and informal explanation (including voice transcriptions) into a concise, searchable entry. You, the connected agent, prepare the metadata; the server does not summarize it.',
   'Preserve robin_code exactly. Remove repetition and unrelated storytelling from metadata, but retain conditions, exceptions, final partial batches, datatypes and behavior that affect correct use.',
@@ -70,7 +69,7 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
     try { rules = (await catalogCache.get(context.power_fx)).developmentRules(); }
     catch { catalogError = 'Catalog unavailable. Use compatible approved snippets where sufficient; reload this context before introducing catalog actions.'; }
     const maintenance = role === 'maintainer' ? {
-      authoring_guidance: authoringGuidance, catalog_update: await catalogCache.checkForUpdates()
+      authoring_guidance: authoringGuidance
     } : {};
     return { ...context, development_prompt: developmentPrompt(context.power_fx, rules),
       ...store.context(role, context.power_fx), ...maintenance,
@@ -122,14 +121,6 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
       key_id: z.string().uuid().optional(), offset: z.number().int().min(0).default(0),
       limit: z.number().int().min(1).max(100).default(30)
     }, true, args => usage.report(args));
-    tool('get_catalog_update_status', 'Read the daily upstream check and any pending catalog update. Ask for explicit approval before updating. Checking never replaces local catalogs.', {}, true,
-      () => catalogCache.checkForUpdates(), { openWorldHint: true });
-    tool('update_catalogs', 'Only after the maintainer explicitly approves the offered commit: download and atomically activate all four Classic and Power Fx JSON catalogs locally. Replaces the current reference baseline for all users. Pass the exact available_commit from catalog_update/status; never infer approval.', {
-      expected_commit: z.string().regex(/^[a-f0-9]{40}$/), confirmed: z.literal(true)
-    }, false, async args => {
-      try { return await catalogCache.update(args); }
-      catch (error) { throw new KnowledgeError(`Catalog update failed: ${error.message}`); }
-    }, { openWorldHint: true, idempotentHint: true });
     tool('list_patterns', 'List IDs and latest revisions, including drafts, for managing the knowledge base. Read full content with get_pattern.', {
       status: z.enum(['all', 'draft', 'published']).default('all'),
       offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(50).default(20)
@@ -169,7 +160,7 @@ export function validateConfig(config) {
   }
 }
 
-export function createApp(store, config, { catalogCache = new CatalogCache({ directory: config.catalogCachePath ?? './data/catalog-cache' }) } = {}) {
+export function createApp(store, config, { catalogCache = new CatalogCache() } = {}) {
   validateConfig(config);
   const app = express();
   const usage = new UsageStats(store.db, { enabled: config.usageEnabled, retentionDays: config.usageRetentionDays });
