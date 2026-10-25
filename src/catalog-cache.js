@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { CatalogIndex, catalogFiles, parseCatalogPair } from './catalog.js';
 
 const metadataSchema = z.object({ commit: z.string().regex(/^[a-f0-9]{40}$/), downloaded_at: z.string().datetime(),
-  checksums: z.record(z.string().regex(/^[a-f0-9]{64}$/)) });
+  checksums: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)) });
 const hash = value => createHash('sha256').update(value).digest('hex');
 const modes = ['disabled', 'enabled'];
 const bundledDirectory = fileURLToPath(new URL('../catalogs/', import.meta.url));

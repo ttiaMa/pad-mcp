@@ -1,8 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import express from 'express';
 import { z } from 'zod';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { McpServer, createMcpHandler, isLegacyRequest, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
 import { KnowledgeError } from './store.js';
 import { idSchema, contextIdSchema, importSchema, saveShape, searchShape } from './schema.js';
 import { CatalogCache } from './catalog-cache.js';
@@ -34,7 +34,7 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
   });
   function tool(name, description, inputSchema, readOnly, handler, annotations = {}) {
     server.registerTool(name, {
-      description, inputSchema,
+      description, inputSchema: z.object(inputSchema),
       annotations: { readOnlyHint: readOnly, destructiveHint: !readOnly, openWorldHint: false, ...annotations }
     }, async args => {
       let success = false;
@@ -195,15 +195,26 @@ export function createApp(store, config, { catalogCache = new CatalogCache() } =
     next();
   });
   app.post('/mcp', express.json({ limit: '2mb' }), async (req, res) => {
-    const server = buildMcp(store, res.locals.role, catalogCache, usage, res.locals.apiKeyId);
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    res.on('close', () => { void server.close().catch(error => console.error('MCP close failed:', error)); });
+    const factory = () => buildMcp(store, res.locals.role, catalogCache, usage, res.locals.apiKeyId);
+    const modern = createMcpHandler(factory, { legacy: 'reject' });
     try {
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
+      await toNodeHandler({ fetch: async (request, options) => {
+        if (!await isLegacyRequest(request, options?.parsedBody)) return modern.fetch(request, options);
+        // Keep JSON responses for existing clients and raw HTTP integrations.
+        const server = factory();
+        const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+        try {
+          await server.connect(transport);
+          return await transport.handleRequest(request, options);
+        } finally {
+          await server.close();
+        }
+      } }, { onerror: error => console.error('MCP adapter failed:', error) })(req, res, req.body);
     } catch (error) {
       console.error('MCP request failed:', error);
       if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null });
+    } finally {
+      await modern.close().catch(error => console.error('MCP close failed:', error));
     }
   });
   app.all('/mcp', (_req, res) => res.status(405).set('Allow', 'POST').json({ error: 'Use POST. Stateless server has no SSE sessions.' }));

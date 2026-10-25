@@ -10,7 +10,7 @@ const action = z.object({
   kind: z.enum(['Action', 'Condition', 'Wait', 'While']),
   selector: z.string().nullable(), template: text, golden_example: text,
   input_params: z.array(parameter), output_params: z.array(parameter),
-  constraints: z.record(z.unknown()), sibling_selectors: z.array(text),
+  constraints: z.record(z.string(), z.unknown()), sibling_selectors: z.array(text),
   needs_ui_selector: z.boolean(), validation: text,
   error_handling: errorHandling.optional()
 }).passthrough();

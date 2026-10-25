@@ -1,6 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 import { packageEntrySchema } from '../src/schema.js';
 import { loadLocalEnv } from '../src/env.js';

@@ -8,8 +8,7 @@ import { request } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { KnowledgeStore, PATTERN_PREVIEW_LENGTH } from '../src/store.js';
 import { ApiKeys } from '../src/api-keys.js';
 import { createApp, validateConfig } from '../src/server.js';
@@ -32,7 +31,7 @@ function toolData(response) {
 const testContexts = new WeakMap();
 const testRoles = new WeakMap();
 
-async function setup(t, dependencies = { catalogCache: { get: async mode => new CatalogIndex({ ...documents(mode, 'a'), power_fx: mode }) } }) {
+async function setup(t, dependencies = { catalogCache: { get: async mode => new CatalogIndex({ ...documents(mode, 'a'), power_fx: mode }) } }, protocolMode = 'legacy') {
   const store = new KnowledgeStore(':memory:');
   const developerToken = new ApiKeys(store.db).create('Test Developer').token;
   const listener = createApp(store, config, dependencies).listen(0, '127.0.0.1');
@@ -45,7 +44,7 @@ async function setup(t, dependencies = { catalogCache: { get: async mode => new 
     store.close();
   });
   async function connect(token) {
-    const client = new Client({ name: 'integration-test', version: '1.0.0' });
+    const client = new Client({ name: 'integration-test', version: '1.0.0' }, { versionNegotiation: { mode: protocolMode } });
     clients.push(client);
     await client.connect(new StreamableHTTPClientTransport(new URL(`${url}/mcp`), {
       requestInit: { headers: { Authorization: `Bearer ${token}` } }
@@ -56,7 +55,7 @@ async function setup(t, dependencies = { catalogCache: { get: async mode => new 
     testRoles.set(client, token === config.maintainerToken ? 'maintainer' : 'developer');
     return client;
   }
-  return { store, url, maintainer: await connect(config.maintainerToken), developer: await connect(developerToken) };
+  return { store, url, developerToken, maintainer: await connect(config.maintainerToken), developer: await connect(developerToken) };
 }
 
 async function call(client, name, args = {}) {
@@ -83,9 +82,92 @@ test('real MCP handshake, instructions and server-side tool permissions', async 
   assert.match(maintainer.getInstructions(), /get_development_context/);
   assert.ok((await maintainer.listTools()).tools.some(tool => tool.name === 'save_draft'));
   assert.ok(!(await developer.listTools()).tools.some(tool => tool.name === 'save_draft'));
-  const forbidden = await developer.callTool({ name: 'save_draft', arguments: { id: 'forbidden', expected_revision: 0, content: content() } });
-  assert.equal(forbidden.isError, true);
+  await assert.rejects(developer.callTool({ name: 'save_draft', arguments: { id: 'forbidden', expected_revision: 0, content: content() } }), { code: -32602 });
   assert.equal((await call(maintainer, 'list_patterns')).entries.length, 0);
+});
+
+test('2026 clients keep the same tools, contexts, publication workflow and role boundaries', async t => {
+  const { maintainer, developer, store, url, developerToken } = await setup(t, undefined, { pin: '2026-07-28' });
+  assert.equal(maintainer.getProtocolEra(), 'modern');
+  assert.equal(developer.getProtocolEra(), 'modern');
+  assert.match(developer.getInstructions(), /get_development_context/);
+  assert.equal(toolData(await developer.callTool({ name: 'get_development_context', arguments: {} })).status, 'selection_required');
+  const classic = await call(developer, 'get_development_context', { power_fx: 'disabled' });
+  assert.equal(classic.power_fx, 'disabled');
+  assert.equal((await developer.callTool({ name: 'get_development_context', arguments: { context_id: classic.context_id, power_fx: 'enabled' } })).isError, true);
+  assert.ok((await call(developer, 'search_actions', { context_id: classic.context_id, query: 'text' })).results.length > 0);
+
+  // Both eras can use the same persisted context, without a protocol session.
+  const legacy = await fetch(`${url}/mcp`, { method: 'POST',
+    headers: { Authorization: `Bearer ${developerToken}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-11-25' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_development_context', arguments: { context_id: classic.context_id } } }) });
+  assert.equal(legacy.status, 200);
+  assert.match(legacy.headers.get('content-type'), /application\/json/);
+  assert.equal(legacy.headers.get('mcp-session-id'), null);
+  assert.equal(toolData((await legacy.json()).result).context_id, classic.context_id);
+
+  await save(maintainer, 'modern-pattern');
+  assert.equal((await call(developer, 'search_patterns', { query: 'pagination' })).results.length, 0);
+  await publish(maintainer, 'modern-pattern');
+  const match = (await call(developer, 'search_patterns', { query: 'pagination' })).results[0];
+  assert.equal((await call(developer, 'get_pattern', { id: match.id, revision: match.revision })).content.robin_code, code);
+  const replacement = content({ title: 'Updated pagination', robin_code: code + '# preserved' });
+  await call(maintainer, 'replace_pattern', { id: match.id, expected_revision: 1, content: replacement });
+  assert.equal((await call(developer, 'get_pattern', { id: match.id })).content.robin_code, replacement.robin_code);
+  const exported = await call(maintainer, 'export_knowledge');
+  await call(maintainer, 'import_knowledge', { package: { schema_version: 2, entries: [{ ...exported.entries[0], id: 'modern-import' }] } });
+  assert.equal(store.get('modern-import', 'maintainer').published, false);
+  await call(maintainer, 'unpublish_pattern', { id: match.id });
+  assert.equal((await call(developer, 'search_patterns', { query: 'pagination' })).results.length, 0);
+  await call(maintainer, 'delete_pattern', { id: match.id, expected_revision: 2 });
+  assert.deepEqual((await call(maintainer, 'list_patterns')).entries.map(entry => entry.id), ['modern-import']);
+  await assert.rejects(developer.callTool({ name: 'save_draft', arguments: { id: 'forbidden', expected_revision: 0, content: content() } }), { code: -32602 });
+  await assert.rejects(maintainer.callTool({ name: 'missing_tool', arguments: {} }), { code: -32602 });
+  assert.equal((await maintainer.callTool({ name: 'publish_revision', arguments: { id: 'missing', revision: 1 } })).isError, true);
+  assert.ok((await call(maintainer, 'get_usage_stats')).results.length > 0);
+  const lists = await Promise.all(Array.from({ length: 8 }, (_, index) => (index % 2 ? developer : maintainer).listTools()));
+  lists.forEach((list, index) => assert.equal(list.tools.some(tool => tool.name === 'save_draft'), index % 2 === 0));
+});
+
+test('2026 discovery and HTTP metadata are validated without weakening authentication', async t => {
+  const { url, developerToken, maintainer, developer, store } = await setup(t);
+  const rpc = async (method, params = {}, headers = {}, version = '2026-07-28') => {
+    const response = await fetch(`${url}/mcp`, { method: 'POST',
+      headers: { Authorization: `Bearer ${developerToken}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream',
+        'MCP-Protocol-Version': version, 'MCP-Method': method, ...(params.name ? { 'MCP-Name': params.name } : {}), ...headers },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: { ...params, _meta: {
+        'io.modelcontextprotocol/protocolVersion': version, 'io.modelcontextprotocol/clientCapabilities': {}
+      } } }) });
+    return { response, body: await response.json() };
+  };
+  const discovery = await rpc('server/discover');
+  assert.equal(discovery.response.status, 200);
+  assert.equal(discovery.response.headers.get('cache-control'), 'no-store');
+  assert.equal(discovery.response.headers.get('mcp-session-id'), null);
+  assert.ok(discovery.body.result.supportedVersions.includes('2026-07-28'));
+  assert.equal(discovery.body.result.resultType, 'complete');
+  assert.equal(discovery.body.result.cacheScope, 'private');
+  assert.equal(discovery.body.result.ttlMs, 0);
+  assert.equal(discovery.body.result._meta['io.modelcontextprotocol/serverInfo'].name, 'pad-mcp');
+  assert.equal(discovery.body.result.instructions, developer.getInstructions());
+  const list = await rpc('tools/list');
+  assert.deepEqual(list.body.result.tools, (await developer.listTools()).tools);
+  const adminList = await rpc('tools/list', {}, { Authorization: `Bearer ${config.maintainerToken}` });
+  assert.deepEqual(adminList.body.result.tools, (await maintainer.listTools()).tools);
+  assert.equal((await rpc('tools/list', {}, { Authorization: 'Bearer invalid' })).response.status, 401);
+  assert.equal((await rpc('server/discover', {}, { Origin: 'https://untrusted.example' })).response.status, 403);
+  const mismatch = await rpc('tools/list', {}, { 'MCP-Protocol-Version': '2025-11-25' });
+  assert.equal(mismatch.response.status, 400);
+  assert.ok(mismatch.body.error);
+  const methodMismatch = await rpc('tools/list', {}, { 'MCP-Method': 'tools/call' });
+  assert.equal(methodMismatch.response.status, 400);
+  const unsupported = await rpc('tools/list', {}, {}, '2099-01-01');
+  assert.equal(unsupported.body.error.code, -32022);
+  const missing = await rpc('tools/call', { name: 'missing_tool', arguments: {} });
+  assert.equal(missing.body.error.code, -32602);
+  const keys = new ApiKeys(store.db);
+  keys.delete(keys.list()[0].id);
+  assert.equal((await rpc('tools/list')).response.status, 401);
 });
 test('draft -> exact publication -> new draft preserves published code and revision history', async t => {
   const { maintainer, developer } = await setup(t);
@@ -314,8 +396,7 @@ test('Developers cannot invoke any Maintainer mutation, including replacement an
   const developerTools = (await developer.listTools()).tools.map(tool => tool.name);
   for (const [name, args] of Object.entries(mutations)) {
     assert.ok(!developerTools.includes(name), name);
-    const response = await developer.callTool({ name, arguments: args });
-    assert.equal(response.isError, true, name);
+    await assert.rejects(developer.callTool({ name, arguments: args }), { code: -32602 }, name);
   }
   assert.equal(store.get('protected', 'developer').revision, 1);
   assert.equal(store.list({}).entries.length, 1);
@@ -523,7 +604,7 @@ test('catalog MCP tools use bundled catalogs, selected edition and bounded respo
     const names = (await client.listTools()).tools.map(tool => tool.name);
     for (const name of ['get_catalog_update_status', 'update_catalogs']) {
       assert.equal(names.includes(name), false);
-      assert.equal((await client.callTool({ name, arguments: { expected_commit: 'b'.repeat(40), confirmed: true } })).isError, true);
+      await assert.rejects(client.callTool({ name, arguments: { expected_commit: 'b'.repeat(40), confirmed: true } }), { code: -32602 });
     }
   }
   assert.equal(store.export({}).entries.length, 0);
