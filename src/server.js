@@ -10,6 +10,7 @@ import { actionLookup, typeLookup } from './catalog.js';
 import { developmentPrompt } from './prompts.js';
 import { ApiKeys } from './api-keys.js';
 import { UsageStats } from './usage.js';
+import { CallRateLimiter, DEFAULT_CALL_RATE_LIMIT_PER_MINUTE } from './rate-limit.js';
 
 export const instructions = `Call get_development_context first. Ask the user to choose PAD Classic or Power Fx before supplying power_fx disabled or enabled. Reuse the returned context_id throughout the chat; never create another context to switch modes. Development guidance is returned after selection.`;
 
@@ -148,6 +149,9 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
 }
 
 export function validateConfig(config) {
+  if (config.callRateLimitPerMinute !== undefined && (!Number.isSafeInteger(config.callRateLimitPerMinute) || config.callRateLimitPerMinute < 1)) {
+    throw new Error('MCP_CALL_RATE_LIMIT_PER_MINUTE must be a positive safe integer.');
+  }
   if (config.usageEnabled !== undefined && typeof config.usageEnabled !== 'boolean') throw new Error('USAGE_STATS_ENABLED must be true or false.');
   if (config.usageRetentionDays !== undefined && (!Number.isInteger(config.usageRetentionDays) || config.usageRetentionDays < 1 || config.usageRetentionDays > 365)) throw new Error('USAGE_RETENTION_DAYS must be an integer from 1 to 365.');
   if (!config.maintainerToken || config.maintainerToken.length < 32) throw new Error('MCP_MAINTAINER_TOKEN must contain at least 32 characters.');
@@ -160,7 +164,7 @@ export function validateConfig(config) {
   }
 }
 
-export function createApp(store, config, { catalogCache = new CatalogCache() } = {}) {
+export function createApp(store, config, { catalogCache = new CatalogCache(), rateLimitNow } = {}) {
   validateConfig(config);
   const app = express();
   const usage = new UsageStats(store.db, { enabled: config.usageEnabled, retentionDays: config.usageRetentionDays });
@@ -172,6 +176,7 @@ export function createApp(store, config, { catalogCache = new CatalogCache() } =
   const digest = value => createHash('sha256').update(value).digest();
   const maintainerDigest = digest(config.maintainerToken);
   const apiKeys = new ApiKeys(store.db);
+  const callRateLimiter = new CallRateLimiter(config.callRateLimitPerMinute ?? DEFAULT_CALL_RATE_LIMIT_PER_MINUTE, { now: rateLimitNow });
 
   app.get('/healthz', (_req, res) => {
     try { store.health(); res.json({ status: 'ok' }); }
@@ -191,6 +196,12 @@ export function createApp(store, config, { catalogCache = new CatalogCache() } =
       if (!key) return res.status(401).set('WWW-Authenticate', 'Bearer realm="pad-mcp"').json({ error: 'Invalid token.' });
       res.locals.role = 'developer';
       res.locals.apiKeyId = key.id;
+    }
+    const retryAfter = callRateLimiter.consume(res.locals.role === 'maintainer' ? 'maintainer' : res.locals.apiKeyId);
+    if (retryAfter) {
+      return res.status(429).set('Retry-After', String(retryAfter)).json({
+        error: 'MCP request rate limit exceeded. This request was not executed.', retry_after_seconds: retryAfter
+      });
     }
     next();
   });

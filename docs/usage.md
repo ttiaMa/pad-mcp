@@ -148,6 +148,8 @@ npm run transfer -- import knowledge.json
 
 Export refuses to overwrite an existing file. Import validates the entire file first, rejects existing IDs and never inherits publication approval. Imported revision numbers are source metadata; local revisions start at 1. For existing entries, use draft updates or approved replacement.
 
+On HTTP `429`, the script follows the server's `Retry-After` delay (1–60 seconds), retrying that HTTP request at most three times. Commands are unchanged. Network failures and other errors are not automatically retried because a write may already have succeeded. If an import still fails, earlier completed batches remain imported.
+
 ### Edit an exported collection
 
 Export includes all currently published patterns, but no drafts or revision history. You can edit `content` by hand while preserving each entry's stable `id` and the package structure.

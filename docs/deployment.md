@@ -11,6 +11,7 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 | Variable | Purpose |
 | --- | --- |
 | `MCP_MAINTAINER_TOKEN` | Required random secret, at least 32 characters; full knowledge-management access |
+| `MCP_CALL_RATE_LIMIT_PER_MINUTE` | Maximum authenticated MCP requests per API key in any rolling 60 seconds; positive integer, default `100` |
 | `USAGE_STATS_ENABLED` | `true` by default; set to `false` to stop collecting Developer usage statistics |
 | `USAGE_RETENTION_DAYS` | Retain 90 UTC calendar dates by default; accepts 1–365. See [Usage statistics](usage-statistics.md) |
 | `PUBLIC_URL` | External origin such as `https://mcp.example.com`, without a path |
@@ -27,6 +28,7 @@ The application rejects missing Maintainer credentials or values shorter than 32
 | Variable | Local `.env.example` | Bundled Docker Compose |
 | --- | --- | --- |
 | `MCP_MAINTAINER_TOKEN` | Empty; set your secret | Required; supply through Coolify or Compose |
+| `MCP_CALL_RATE_LIMIT_PER_MINUTE` | `100` | Configurable; defaults to `100` |
 | `PUBLIC_URL` | `http://localhost:8080` | Required; set the deployment's HTTPS origin |
 | `HOST` | `127.0.0.1` | Fixed at `0.0.0.0` |
 | `PORT` | `8080` | Fixed at `8080` |
@@ -36,7 +38,7 @@ The application rejects missing Maintainer credentials or values shorter than 32
 
 The Dockerfile additionally sets `NODE_ENV=production`, along with the container's host, port and database path. The application does not use `NODE_ENV` to select Coolify environment groups. `MCP_URL` is an optional endpoint override for the transfer CLI; `PAD_MCP_TOKEN` belongs to client configuration, not the server.
 
-Coolify has separate [Production and Preview variable groups](https://coolify.io/docs/applications/configuration/environment-variables). Production is the main deployment; Preview is for pull-request deployments. The Compose references expose `MCP_MAINTAINER_TOKEN`, `PUBLIC_URL`, `USAGE_STATS_ENABLED` and `USAGE_RETENTION_DAYS` as configurable values. Fixed Compose values are not overridden merely by adding similarly named entries to the dashboard.
+Coolify has separate [Production and Preview variable groups](https://coolify.io/docs/applications/configuration/environment-variables). Production is the main deployment; Preview is for pull-request deployments. The Compose references expose `MCP_MAINTAINER_TOKEN`, `MCP_CALL_RATE_LIMIT_PER_MINUTE`, `PUBLIC_URL`, `USAGE_STATS_ENABLED` and `USAGE_RETENTION_DAYS` as configurable values. Fixed Compose values are not overridden merely by adding similarly named entries to the dashboard.
 
 Review both groups when removing an obsolete setting from an existing application. Developer authentication uses database keys only; there is no Developer-token environment setting. Use separate Maintainer credentials and the correct `PUBLIC_URL` for a preview, then redeploy the affected environment after saving changes.
 
@@ -91,6 +93,14 @@ To restore, stop the service and restore the complete backup into the volume wit
 Do not use `docker compose down -v` when you intend to preserve the collection. Moving to another Coolify server also requires transferring the data volume.
 
 Permanent deletion removes a pattern and all its revisions from the live application's tables and index. It does not remove previous exports or backups and is not a secure disk-erasure mechanism. Old deleted data must not be accidentally republished after a backup restore.
+
+## MCP request rate limit
+
+`MCP_CALL_RATE_LIMIT_PER_MINUTE=100` permits 100 authenticated requests to `/mcp` in any rolling 60 seconds for each API key. All chats and clients using the same key share its budget. Each Developer key has a separate budget; the Maintainer key uses the same configured limit with its own budget. Connection messages, discovery, tool listings and rejected tool calls count too. `/healthz` and local API key commands are excluded.
+
+Requests over the limit receive HTTP `429` with `Retry-After` in seconds before body parsing or tool execution. Rejections do not extend the wait. Clients must wait before retrying; automatic retries depend on the client. The transfer CLI handles these rejections with bounded retries. Rejected requests do not appear as tool executions in usage statistics.
+
+Counters stay in process memory, expire after inactivity and reset on restart. Change the environment value and restart/redeploy to apply it; for example, set `1000` for a higher allowance. This is a per-key limit, not a total server capacity guarantee or a restriction on simultaneous requests. A key can use its whole budget in a burst. Invalid credentials are rejected before counting; proxy and anonymous-traffic protections remain the instance operator's responsibility. Multiple processes or replicas would need shared counters.
 
 ## Current limits
 

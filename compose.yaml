@@ -9,6 +9,7 @@ services:
       DATABASE_PATH: /app/data/knowledge.sqlite
       PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL to your HTTPS origin}
       MCP_MAINTAINER_TOKEN: ${MCP_MAINTAINER_TOKEN:?Set a random maintainer token of at least 32 characters}
+      MCP_CALL_RATE_LIMIT_PER_MINUTE: ${MCP_CALL_RATE_LIMIT_PER_MINUTE:-100}
       USAGE_STATS_ENABLED: ${USAGE_STATS_ENABLED:-true}
       USAGE_RETENTION_DAYS: ${USAGE_RETENTION_DAYS:-90}
     expose:

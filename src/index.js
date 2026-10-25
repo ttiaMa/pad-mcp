@@ -3,6 +3,7 @@ import { bootstrapKnowledge } from './bootstrap.js';
 import { createApp, validateConfig } from './server.js';
 import { CatalogCache } from './catalog-cache.js';
 import { loadLocalEnv } from './env.js';
+import { DEFAULT_CALL_RATE_LIMIT_PER_MINUTE } from './rate-limit.js';
 
 loadLocalEnv();
 
@@ -11,6 +12,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT m
 const databasePath = process.env.DATABASE_PATH ?? './data/knowledge.sqlite';
 const config = {
   maintainerToken: process.env.MCP_MAINTAINER_TOKEN,
+  callRateLimitPerMinute: Number(process.env.MCP_CALL_RATE_LIMIT_PER_MINUTE ?? DEFAULT_CALL_RATE_LIMIT_PER_MINUTE),
   usageEnabled: process.env.USAGE_STATS_ENABLED === undefined ? true
     : process.env.USAGE_STATS_ENABLED === 'true' ? true : process.env.USAGE_STATS_ENABLED === 'false' ? false : null,
   usageRetentionDays: Number(process.env.USAGE_RETENTION_DAYS ?? 90),

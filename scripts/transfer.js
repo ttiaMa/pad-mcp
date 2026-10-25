@@ -3,6 +3,7 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { z } from 'zod';
 import { packageEntrySchema } from '../src/schema.js';
 import { loadLocalEnv } from '../src/env.js';
+import { createRateLimitFetch, TRANSFER_REQUEST_TIMEOUT_MS } from './rate-limit-fetch.js';
 
 loadLocalEnv();
 
@@ -16,10 +17,11 @@ const token = process.env.MCP_MAINTAINER_TOKEN;
 if (!token) throw new Error('MCP_MAINTAINER_TOKEN is required.');
 const client = new Client({ name: 'pad-mcp-transfer', version: '0.1.0' });
 const transport = new StreamableHTTPClientTransport(new URL(endpoint), {
+  fetch: createRateLimitFetch(),
   requestInit: { headers: { Authorization: `Bearer ${token}` } }
 });
 async function call(name, args) {
-  const response = await client.callTool({ name, arguments: args });
+  const response = await client.callTool({ name, arguments: args }, { timeout: TRANSFER_REQUEST_TIMEOUT_MS });
   if (response.isError) throw new Error(response.content?.find(item => item.type === 'text')?.text ?? 'Tool failed.');
   return response.structuredContent ?? JSON.parse(response.content[0].text);
 }
@@ -29,7 +31,7 @@ try {
     schema_version: z.literal(2), entries: z.array(packageEntrySchema).max(10000)
   }).strict().parse(JSON.parse(await readFile(file, 'utf8'))) : null;
   if (pack && new Set(pack.entries.map(entry => entry.id)).size !== pack.entries.length) throw new Error('Duplicate IDs in package.');
-  await client.connect(transport);
+  await client.connect(transport, { timeout: TRANSFER_REQUEST_TIMEOUT_MS });
   if (operation === 'export') {
     const entries = [];
     let offset = 0;

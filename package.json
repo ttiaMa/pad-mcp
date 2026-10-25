@@ -10,7 +10,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test \"test/*.test.js\"",
-    "check": "node --check src/env.js && node --check src/index.js && node --check src/bootstrap.js && node --check src/store.js && node --check src/server.js && node --check src/schema.js && node --check src/catalog.js && node --check src/catalog-cache.js && node --check src/prompts.js && node --check scripts/transfer.js && node --check src/usage.js && node --check src/api-keys.js && node --check scripts/keys.js",
+    "check": "node --check src/env.js && node --check src/index.js && node --check src/bootstrap.js && node --check src/store.js && node --check src/server.js && node --check src/schema.js && node --check src/catalog.js && node --check src/catalog-cache.js && node --check src/prompts.js && node --check scripts/transfer.js && node --check scripts/rate-limit-fetch.js && node --check src/rate-limit.js && node --check src/usage.js && node --check src/api-keys.js && node --check scripts/keys.js",
     "transfer": "node scripts/transfer.js",
     "keys": "node scripts/keys.js"
   },
