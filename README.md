@@ -29,7 +29,9 @@ Set the Maintainer API key through the `MCP_MAINTAINER_TOKEN` environment variab
 
 ## Get started
 
-- [Run locally, deploy on Coolify and connect your agent](docs/setup.md)
+Use [release v1.0.0](https://github.com/ttiaMa/pad-mcp/releases/tag/v1.0.0) for a fixed version, or `main` to follow development. Both support the same installation methods.
+
+- [Install with Docker Compose or Node.js and connect your agent](docs/setup.md)
 - [Use the tools and publish snippets](docs/usage.md)
 - [Upgrade, back up and restore your data](docs/deployment.md)
 - [Read the prompts: shared](src/prompts/common.md) · [Classic](src/prompts/classic.md) · [Power Fx](src/prompts/power-fx.md)

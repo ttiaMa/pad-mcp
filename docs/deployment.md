@@ -4,7 +4,7 @@
 
 One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index, Developer API key hashes and metadata. No AI provider or remote database is required. Catalog lookups work offline. The server makes no outbound requests for catalogs.
 
-Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8080. The container runs as the unprivileged `node` user. The image uses Node 24; `npm ci` installs the exact dependency versions in the lockfile. Validate base-image updates before deployment.
+An HTTPS reverse proxy forwards public requests to internal port 8080. The container runs as the unprivileged `node` user. The image uses Node 24; `npm ci` installs the exact dependency versions in the lockfile. Validate base-image updates before deployment.
 
 ## Configuration
 
@@ -23,11 +23,11 @@ The application rejects missing Maintainer credentials or values shorter than 32
 
 ### Where environment values come from
 
-`.env.example` is a local setup template, not a file loaded by the application. The server and CLI commands optionally read `.env` in the working directory. Missing `.env` files are silent; existing process variables take precedence. Docker excludes `.env` files from the image, so Coolify normally supplies configuration directly to the container.
+`.env.example` is a local setup template, not a file loaded by the application. The server and CLI commands optionally read `.env` in the working directory. Missing `.env` files are silent; existing process variables take precedence. Docker excludes `.env` files from the image, so deployed containers receive configuration through their environment.
 
 | Variable | Local `.env.example` | Bundled Docker Compose |
 | --- | --- | --- |
-| `MCP_MAINTAINER_TOKEN` | Empty; set your secret | Required; supply through Coolify or Compose |
+| `MCP_MAINTAINER_TOKEN` | Empty; set your secret | Required; supply through Compose or the container environment |
 | `MCP_CALL_RATE_LIMIT_PER_MINUTE` | `100` | Configurable; defaults to `100` |
 | `PUBLIC_URL` | `http://localhost:8080` | Required; set the deployment's HTTPS origin |
 | `HOST` | `127.0.0.1` | Fixed at `0.0.0.0` |
@@ -36,11 +36,9 @@ The application rejects missing Maintainer credentials or values shorter than 32
 | `USAGE_STATS_ENABLED` | `true` | Configurable; defaults to `true` |
 | `USAGE_RETENTION_DAYS` | `90` | Configurable; defaults to `90` |
 
-The Dockerfile additionally sets `NODE_ENV=production`, along with the container's host, port and database path. The application does not use `NODE_ENV` to select Coolify environment groups. `MCP_URL` is an optional endpoint override for the transfer CLI; `PAD_MCP_TOKEN` belongs to client configuration, not the server.
+The Dockerfile additionally sets `NODE_ENV=production`, along with the container's host, port and database path. `MCP_URL` is an optional endpoint override for the transfer CLI; `PAD_MCP_TOKEN` belongs to client configuration, not the server.
 
-Coolify has separate [Production and Preview variable groups](https://coolify.io/docs/applications/configuration/environment-variables). Production is the main deployment; Preview is for pull-request deployments. The Compose references expose `MCP_MAINTAINER_TOKEN`, `MCP_CALL_RATE_LIMIT_PER_MINUTE`, `PUBLIC_URL`, `USAGE_STATS_ENABLED` and `USAGE_RETENTION_DAYS` as configurable values. Fixed Compose values are not overridden merely by adding similarly named entries to the dashboard.
-
-Review both groups when removing an obsolete setting from an existing application. Developer authentication uses database keys only; there is no Developer-token environment setting. Use separate Maintainer credentials and the correct `PUBLIC_URL` for a preview, then redeploy the affected environment after saving changes.
+The Compose references expose `MCP_MAINTAINER_TOKEN`, `MCP_CALL_RATE_LIMIT_PER_MINUTE`, `PUBLIC_URL`, `USAGE_STATS_ENABLED` and `USAGE_RETENTION_DAYS` as configurable values. Fixed Compose values must be changed in the Compose definition or an override. Developer authentication uses database keys only; there is no Developer-token environment setting. For a separate test instance, use its own credentials, URL and data volume.
 
 ### Database initialization
 
@@ -76,7 +74,44 @@ With Docker installed and `.env` configured (`PUBLIC_URL=http://localhost:8080`)
 docker compose -f compose.yaml -f compose.local.yaml up --build -d
 ```
 
-The local override publishes port 8080 on loopback only. On Coolify, use `compose.yaml` alone; the proxy handles public HTTPS routing.
+The local override publishes port 8080 on loopback only. For a containerized reverse proxy on the application network, use `compose.yaml` alone and route to `pad-mcp:8080`. For a reverse proxy on the host, the loopback override also works with an HTTPS `PUBLIC_URL`.
+
+## Update an existing instance
+
+A GitHub release identifies a fixed Git tag, such as `v1.0.0`. It includes source archives containing the Dockerfile, Compose files, catalogs and lockfile. A Git checkout at that tag and an extracted release archive use the same build and runtime configuration. Release notes describe changes, migration requirements and relevant commits. Keep published tags fixed.
+
+Before updating, read the target release notes, back up the data volume, and check `git status` if using Git. Preserve your `.env`, existing Compose overrides, project name, volume and domain. Compose normally derives its project name from the directory: extracting a new archive into a differently named directory can select a different volume. Reuse the existing directory/project identity rather than creating a second stack.
+
+For a Git checkout, fetch tags and select the published release you want. For the initial stable version:
+
+```sh
+git fetch origin --tags
+git checkout --detach v1.0.0
+```
+
+For an archive installation, replace application sources with those from the target release while keeping local configuration and data. Rebuild using the same Compose files and project name as before. For the host-proxy/local configuration in the setup guide:
+
+```sh
+docker compose -f compose.yaml -f compose.local.yaml up --build -d
+docker compose -f compose.yaml -f compose.local.yaml ps
+```
+
+If your proxy uses the Docker network and you originally deployed with `compose.yaml` alone, use `docker compose up --build -d` instead. Verify `/healthz`, reconnect your MCP client and check a known lookup and API key. Startup applies supported database migrations automatically; it does not reset the collection. An older application may not support a migrated database, so rollback can require the matching pre-upgrade backup.
+
+To follow development instead, use `git switch main` and `git pull --ff-only origin main` in a clean checkout, then perform the same backup, build and verification steps. Builds follow your selected source; neither installation method updates itself automatically. Deployments following `main` can receive changes before a stable release is published.
+
+### Optional: pin a Coolify instance to a release
+
+Keep the existing application so its storage and routing stay attached. Back up `/app/data`, then resolve the desired release to its full commit SHA in a local checkout:
+
+```sh
+git fetch origin --tags
+git rev-list -n 1 v1.0.0
+```
+
+In the application's **Source** settings, keep the repository and `main` branch, replace **Commit SHA** (`HEAD` by default) with that full SHA, and save. Select manual deployments under **Advanced > Deployment > Auto deploy** (older versions expose an Auto Deploy toggle). Redeploy the same application, confirm the commit in deployment logs, then check `/healthz` and reconnect the MCP client. Update the pinned SHA deliberately when selecting a newer release. Coolify's resource-group Tags are unrelated to Git release tags.
+
+Use `/compose.yaml`, preserve the existing `/app/data` mount and domain, and keep `PUBLIC_URL` at the external HTTPS origin. If using Preview deployments, configure their separate environment values and storage too. See Coolify's [source settings](https://github.com/coollabsio/coolify/blob/main/resources/views/livewire/project/application/source.blade.php), [automatic deployments](https://coolify.io/docs/applications/deployments/automatic-deployments) and [environment variables](https://coolify.io/docs/applications/configuration/environment-variables). Labels depend on the installed Coolify version.
 
 ## Back up and restore
 
@@ -90,7 +125,7 @@ For an online backup, use a tool supporting the SQLite Backup API. Do not copy o
 
 To restore, stop the service and restore the complete backup into the volume with read/write permissions for the image's `node` user (UID 1000), then restart. Check `/healthz`, list entries and run a known search. Periodically test recovery on a separate instance.
 
-Do not use `docker compose down -v` when you intend to preserve the collection. Moving to another Coolify server also requires transferring the data volume.
+Do not use `docker compose down -v` when you intend to preserve the collection. Moving to another server also requires transferring the data volume.
 
 Permanent deletion removes a pattern and all its revisions from the live application's tables and index. It does not remove previous exports or backups and is not a secure disk-erasure mechanism. Old deleted data must not be accidentally republished after a backup restore.
 

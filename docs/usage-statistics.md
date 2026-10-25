@@ -56,7 +56,7 @@ Connections, tool listings, invalid credentials, unknown or forbidden tools, and
 | `USAGE_STATS_ENABLED` | `true` | Set to `false` to stop collecting counters and updating `last_used_at` |
 | `USAGE_RETENTION_DAYS` | `90` | Number of UTC calendar dates to retain, including today; accepts 1–365 |
 
-Set these variables in the server environment or Compose/Coolify configuration, then restart or redeploy. Reports remain available when collection is disabled, and previously collected counters continue to expire.
+Set these variables in the server environment or Docker Compose configuration, then restart or redeploy. Reports remain available when collection is disabled, and previously collected counters continue to expire.
 
 Expired rows are removed at startup, hourly while the server runs, and before reports. A stopped server performs cleanup when it next starts. SQLite can reuse freed pages; deleting rows does not necessarily shrink the database file immediately.
 

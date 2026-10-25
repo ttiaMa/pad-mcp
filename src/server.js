@@ -30,7 +30,7 @@ function result(data) {
 }
 
 function buildMcp(store, role, catalogCache, usage, keyId) {
-  const server = new McpServer({ name: 'pad-mcp', version: '0.1.0' }, {
+  const server = new McpServer({ name: 'pad-mcp', version: '1.0.0' }, {
     instructions
   });
   function tool(name, description, inputSchema, readOnly, handler, annotations = {}) {

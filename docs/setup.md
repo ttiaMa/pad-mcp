@@ -1,53 +1,87 @@
 # Setup and client connections
 
-## Run locally
+## Choose a version
 
-The bundled [`knowledge/seed.json`](../knowledge/seed.json) is empty, so a new installation starts with no patterns. Add and publish entries through the Maintainer tools, or supply an approved seed collection before the first startup. Seeding runs once per database: subsequent restarts preserve edits, withdrawals and deletions. Existing collections are left unchanged.
+For a stable installation, download the source archive from [release v1.0.0](https://github.com/ttiaMa/pad-mcp/releases/tag/v1.0.0) and extract it, or use Git:
 
-You can export published patterns, edit the JSON and use it as the seed for a new installation. To update the running collection, use the Maintainer tools. See [Import and export files](usage.md#import-and-export-files).
+```sh
+git clone --branch v1.0.0 https://github.com/ttiaMa/pad-mcp.git pad-mcp
+cd pad-mcp
+```
 
-Requires Node.js 24 or later.
+To follow development instead, clone the `main` branch. A release tag selects a fixed source version; `main` receives ongoing changes. Both use the same configuration, API key commands and persistent database. No prebuilt container image is published with this release; Docker builds it from the selected source.
+
+The bundled [`knowledge/seed.json`](../knowledge/seed.json) is empty, so a new installation starts with no patterns. Add and publish entries through the Maintainer tools, or supply an approved seed collection before the first startup. Seeding runs once per database; existing collections are preserved. See [Import and export files](usage.md#import-and-export-files).
+
+## Install with Docker Compose
+
+Requires Docker Engine with the Docker Compose plugin, or Docker Desktop. Run the following from the selected source directory. Node.js is included in the image and is not required on the host.
+
+### Configure the instance
+
+Copy `.env.example` to `.env` using your shell or file manager:
+
+```sh
+# Linux/macOS
+cp .env.example .env
+```
 
 ```powershell
-npm ci
+# PowerShell
 Copy-Item .env.example .env
+```
+
+Generate a Maintainer token:
+
+```sh
+docker run --rm node:24-bookworm-slim node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Put the generated value in `.env` as `MCP_MAINTAINER_TOKEN`. Keep `PUBLIC_URL=http://localhost:8080` for local use; for a public instance, set the external HTTPS origin, such as `PUBLIC_URL=https://mcp.example.com`. Optional settings and defaults are listed in [Deployment and data](deployment.md#configuration).
+
+### Start the service
+
+For local use, or an HTTPS reverse proxy running on the Docker host:
+
+```sh
+docker compose -f compose.yaml -f compose.local.yaml up --build -d
+docker compose -f compose.yaml -f compose.local.yaml ps
+docker compose -f compose.yaml -f compose.local.yaml logs --tail=100 pad-mcp
+```
+
+The override publishes `127.0.0.1:8080` on the host. Locally, check `http://localhost:8080/healthz`; the MCP endpoint is `http://localhost:8080/mcp`.
+
+For a public instance, point your domain at the host and configure an HTTPS reverse proxy to forward to `http://127.0.0.1:8080`, preserving the original Host header. Then check `https://mcp.example.com/healthz` and use `https://mcp.example.com/mcp`. If the proxy runs in another container, connect it to the application's Docker network and route to service `pad-mcp` on port 8080; `compose.yaml` alone exposes that port inside Docker without publishing it on the host.
+
+`PUBLIC_URL` is the external origin: omit `/mcp` and the internal port when serving HTTPS on port 443. Run one application instance and preserve the `knowledge_data` volume mounted at `/app/data`. See [backups](deployment.md#back-up-and-restore) and [upgrades](deployment.md#update-an-existing-instance).
+
+### Create a Developer key
+
+From the same source directory:
+
+```sh
+docker compose exec pad-mcp npm run keys -- create --name "Roby"
+```
+
+Copy the returned token and share it privately. Use the same Compose project name if you configured a custom one. See [API key management](api-keys.md) for listing, deleting and running commands against a specific container.
+
+### Optional: Coolify
+
+Create an application from Git with the **Docker Compose** build strategy and `/compose.yaml`. Supply the environment values in Coolify and route the `pad-mcp` service domain `https://mcp.example.com:8080` to internal port 8080; set `PUBLIC_URL=https://mcp.example.com`. Use the existing `/app/data` volume across redeployments. In the container terminal, run API key commands from `/app`.
+
+For an existing application, pin **Source > Commit SHA** to the commit behind the release tag and disable automatic Git deployments. See [pin a Coolify instance to a release](deployment.md#optional-pin-a-coolify-instance-to-a-release). Interface labels can vary by Coolify version.
+
+## Run directly with Node.js
+
+Requires Node.js 24 or later. From the selected source directory, run `npm ci`, copy `.env.example` to `.env`, and generate a token:
+
+```sh
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Set the generated value as `MCP_MAINTAINER_TOKEN` in `.env`, then run:
+Set it as `MCP_MAINTAINER_TOKEN` in `.env`, then run `npm start`. Defaults bind the server to `127.0.0.1:8080`. For a public instance, configure HTTPS through a reverse proxy and set `PUBLIC_URL` to the external origin. Preserve `DATABASE_PATH` and its database when upgrading. Create Developer keys with `npm run keys -- create --name "Roby"` from the project directory.
 
-```sh
-npm start
-```
-
-Health check: `http://localhost:8080/healthz`. MCP endpoint: `http://localhost:8080/mcp`, with `Authorization: Bearer <token>`. The endpoint is a protocol interface, not a web page.
-
-The endpoint supports MCP `2026-07-28` and retains compatibility with `2025-11-25` clients and earlier SDK-supported revisions. Existing Bearer tokens and API key commands remain usable. Development tools now require explicit power_fx instead of context_id; reconnect clients to refresh their schemas. Unknown or unavailable tools return a JSON-RPC error; application-level tool failures still use `isError`.
-
-To give a Developer access, open another terminal in the project directory and create an individual key:
-
-```sh
-npm run keys -- create --name "Roby"
-```
-
-Copy the returned token and share it privately. See [API key management](api-keys.md) for listing and deleting keys.
-
-## Deploy on Coolify
-
-Docker Compose defines the application, environment, health check and persistent SQLite volume in one place.
-
-1. Make the project available in a Git repository accessible to Coolify.
-2. Create an application from the repository, select **Docker Compose**, and use `/compose.yaml`.
-3. Set `MCP_MAINTAINER_TOKEN` to a random secret of at least 32 characters and `PUBLIC_URL=https://mcp.example.com`.
-4. Set the `pad-mcp` service domain to `https://mcp.example.com:8080`. The suffix tells Coolify to route to internal port **8080**; public access still uses standard HTTPS.
-5. Deploy, check `https://mcp.example.com/healthz`, then connect your MCP client to `https://mcp.example.com/mcp` using the Maintainer key.
-6. To give Developers access, open the application container's terminal, run `cd /app`, then `npm run keys -- create --name "Roby"`. Share the returned token privately with its recipient. See [API key management](api-keys.md).
-
-`PUBLIC_URL` must not contain `/mcp` or the internal port in production. The `knowledge_data` volume is mounted at `/app/data` and survives normal redeployments. Run **one instance** and back up the volume separately.
-
-See [environment defaults](deployment.md#where-environment-values-come-from) for the local template, container settings and Coolify Production/Preview groups. Developer keys are created through the CLI and do not require a server environment variable.
-
-See [Deployment](deployment.md) for configuration and backups, and [Usage](usage.md) for client setup, tools and data formats.
+The endpoint supports MCP `2026-07-28`, `2025-11-25` and earlier SDK-supported revisions. It requires `Authorization: Bearer <token>` and is a protocol interface, not a web page. Development lookups require explicit `power_fx`; clients upgrading from the old `context_id` contract must reconnect to refresh their tool schemas. Unknown or unavailable tools return a JSON-RPC error; application-level tool failures use `isError`.
 
 ## Connect Codex or Claude Code
 

@@ -79,6 +79,7 @@ async function publish(client, id, revision = 1) {
 
 test('real MCP handshake, instructions and server-side tool permissions', async t => {
   const { maintainer, developer } = await setup(t);
+  assert.equal(maintainer.getServerVersion().version, '1.0.0');
   assert.match(maintainer.getInstructions(), /get_development_context/);
   assert.ok((await maintainer.listTools()).tools.some(tool => tool.name === 'save_draft'));
   assert.ok(!(await developer.listTools()).tools.some(tool => tool.name === 'save_draft'));

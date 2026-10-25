@@ -42,18 +42,7 @@ Deleting a key removes its record, including its hash and metadata, from the liv
 
 Deleting a key also removes its usage counters.
 
-## Use from Coolify or Docker
-
-In Coolify, open the running application container's terminal and run the commands from `/app`:
-
-```sh
-cd /app
-npm run keys -- create --name "Roby"
-npm run keys -- list
-npm run keys -- delete --id KEY_ID
-```
-
-Run the command you need; the example above shows the three available operations. Replace `KEY_ID` with the key's ID.
+## Use from Docker
 
 From a Docker host using this project's Compose file:
 
@@ -62,6 +51,10 @@ docker compose exec pad-mcp npm run keys -- create --name "Roby"
 docker compose exec pad-mcp npm run keys -- list
 docker compose exec pad-mcp npm run keys -- delete --id KEY_ID
 ```
+
+If the container was started without Compose, use `docker exec -w /app CONTAINER npm run keys -- list`, replacing `CONTAINER` with its name or ID. Substitute `create --name "Roby"` or `delete --id KEY_ID` for the other operations. Use `docker --context CONTEXT exec ...` when targeting another Docker host.
+
+Optional Coolify note: open the existing application's container terminal, run `cd /app`, then use the plain `npm run keys -- ...` commands above.
 
 The commands use `DATABASE_PATH`, just like the server. The bundled container configuration points both to `/app/data/knowledge.sqlite`.
 
