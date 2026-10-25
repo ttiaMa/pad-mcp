@@ -93,10 +93,10 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
   }
   tool('search_actions', 'Search the selected PAD edition by English technical keywords or module (category). Returns up to five compact matches by default. Then pass action_id alone for the complete action, parameters, examples, sibling selectors and constraints. Never invent selectors; use the same context_id throughout this chat.', {
     ...catalogShape, action_id: z.string().trim().min(1).max(300).optional(), module: z.string().trim().min(1).max(100).optional()
-  }, true, args => catalogLookup(args, actionLookup, 'searchActions'), { openWorldHint: true });
+  }, true, args => catalogLookup(args, actionLookup, 'searchActions'));
   tool('search_type_reference', 'Search the selected PAD edition by type keywords, or pass an exact type_name (including generic notation) for full syntax, examples and formatting. General rules are in the development context. Reuse context_id; results are reference data, not execution guarantees.', {
     ...catalogShape, type_name: z.string().trim().min(1).max(300).optional()
-  }, true, args => catalogLookup(args, typeLookup, 'searchTypes'), { openWorldHint: true });
+  }, true, args => catalogLookup(args, typeLookup, 'searchTypes'));
   tool('search_patterns', 'Find approved PAD patterns for development or for rebuilding parts of UiPath, Blue Prism and other RPA automations in PAD. Search by implementation need. Returns compact previews only. Retrieve a relevant result with get_pattern using its id and revision before reusing its code or applying its constraints. Drafts are excluded. Supports English and Italian queries.', searchShape, true,
     args => store.searchDevelopment(args, role));
   tool('get_pattern', 'Read the full compatible published pattern, including original Robin and constraints, using context_id and the id/revision from search_patterns. If that revision is no longer published, search again. Maintainers may explicitly use purpose=maintenance without a context to review latest drafts or revision history across modes; maintenance results are not development references.', {

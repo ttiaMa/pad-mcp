@@ -563,7 +563,7 @@ test('catalog MCP tools use bundled catalogs, selected edition and bounded respo
     for (const name of ['search_actions', 'search_type_reference']) {
       const tool = tools.find(item => item.name === name);
       assert.equal(tool.annotations.readOnlyHint, true);
-      assert.equal(tool.annotations.openWorldHint, true);
+      assert.equal(tool.annotations.openWorldHint, false);
     }
   }
   for (const [name, args] of [
