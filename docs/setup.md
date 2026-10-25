@@ -9,7 +9,7 @@ git clone --branch v1.0.0 https://github.com/ttiaMa/pad-mcp.git pad-mcp
 cd pad-mcp
 ```
 
-To follow development instead, clone the `main` branch. A release tag selects a fixed source version; `main` receives ongoing changes. Both use the same configuration, API key commands and persistent database. No prebuilt container image is published with this release; Docker builds it from the selected source.
+To follow stable releases, use `--branch latest` instead; this branch advances only to published stable releases. Use `--branch main` to follow development. All three choices use the same configuration, API key commands and persistent database. No prebuilt container image is published with this release; Docker builds it from the selected source.
 
 The bundled [`knowledge/seed.json`](../knowledge/seed.json) is empty, so a new installation starts with no patterns. Add and publish entries through the Maintainer tools, or supply an approved seed collection before the first startup. Seeding runs once per database; existing collections are preserved. See [Import and export files](usage.md#import-and-export-files).
 
@@ -69,7 +69,7 @@ Copy the returned token and share it privately. Use the same Compose project nam
 
 Create an application from Git with the **Docker Compose** build strategy and `/compose.yaml`. Supply the environment values in Coolify and route the `pad-mcp` service domain `https://mcp.example.com:8080` to internal port 8080; set `PUBLIC_URL=https://mcp.example.com`. Use the existing `/app/data` volume across redeployments. In the container terminal, run API key commands from `/app`.
 
-For an existing application, pin **Source > Commit SHA** to the commit behind the release tag and disable automatic Git deployments. See [pin a Coolify instance to a release](deployment.md#optional-pin-a-coolify-instance-to-a-release). Interface labels can vary by Coolify version.
+To follow stable releases, set **Source > Branch** to `latest` and **Commit SHA** to `HEAD`, and disable automatic Git deployments if you prefer manual updates. See [Coolify release settings](deployment.md#optional-coolify-release-settings), including how to pin one exact version. Interface labels can vary by Coolify version.
 
 ## Run directly with Node.js
 

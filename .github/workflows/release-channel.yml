@@ -1,0 +1,48 @@
+name: Update stable release branch
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stable-release-branch
+  cancel-in-progress: false
+
+jobs:
+  update-latest:
+    if: github.event_name == 'workflow_dispatch' || (!github.event.release.draft && !github.event.release.prerelease)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Point latest at the published stable release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_EVENT_ID: ${{ github.event.release.id }}
+        run: |
+          set -euo pipefail
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq '[.id, .tag_name, .draft, .prerelease] | @tsv')
+          IFS=$'\t' read -r release_id tag draft prerelease <<< "$release"
+          if [[ "$draft" != false || "$prerelease" != false ]]; then
+            echo "No published stable release selected."
+            exit 0
+          fi
+          if [[ -n "$RELEASE_EVENT_ID" && "$RELEASE_EVENT_ID" != "$release_id" ]]; then
+            echo "This event is not for the latest stable release."
+            exit 0
+          fi
+          git check-ref-format "refs/tags/$tag"
+          gh auth setup-git
+          cd "$(mktemp -d "$RUNNER_TEMP/release-channel.XXXXXX")"
+          git init --quiet
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+          git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
+          commit=$(git rev-parse "refs/tags/$tag^{commit}")
+          git push origin "$commit:refs/heads/latest"
+          echo "latest -> $tag ($commit)"

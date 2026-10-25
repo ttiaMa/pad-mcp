@@ -29,7 +29,7 @@ Set the Maintainer API key through the `MCP_MAINTAINER_TOKEN` environment variab
 
 ## Get started
 
-Use [release v1.0.0](https://github.com/ttiaMa/pad-mcp/releases/tag/v1.0.0) for a fixed version, or `main` to follow development. Both support the same installation methods.
+Use a [release tag](https://github.com/ttiaMa/pad-mcp/releases) for a fixed version, the `latest` branch to follow stable releases, or `main` to follow development. All use the same installation methods.
 
 - [Install with Docker Compose or Node.js and connect your agent](docs/setup.md)
 - [Use the tools and publish snippets](docs/usage.md)

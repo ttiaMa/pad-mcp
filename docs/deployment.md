@@ -80,6 +80,8 @@ The local override publishes port 8080 on loopback only. For a containerized rev
 
 A GitHub release identifies a fixed Git tag, such as `v1.0.0`. It includes source archives containing the Dockerfile, Compose files, catalogs and lockfile. A Git checkout at that tag and an extracted release archive use the same build and runtime configuration. Release notes describe changes, migration requirements and relevant commits. Keep published tags fixed.
 
+The `latest` branch follows the most recent stable GitHub release. It advances only when that release is published; normal commits to `main` do not move it. To use it in a clean checkout, run `git fetch origin`, `git switch latest`, and `git pull --ff-only origin latest`, then rebuild as below. Use a version tag when you want to stay on one exact release.
+
 Before updating, read the target release notes, back up the data volume, and check `git status` if using Git. Preserve your `.env`, existing Compose overrides, project name, volume and domain. Compose normally derives its project name from the directory: extracting a new archive into a differently named directory can select a different volume. Reuse the existing directory/project identity rather than creating a second stack.
 
 For a Git checkout, fetch tags and select the published release you want. For the initial stable version:
@@ -100,18 +102,15 @@ If your proxy uses the Docker network and you originally deployed with `compose.
 
 To follow development instead, use `git switch main` and `git pull --ff-only origin main` in a clean checkout, then perform the same backup, build and verification steps. Builds follow your selected source; neither installation method updates itself automatically. Deployments following `main` can receive changes before a stable release is published.
 
-### Optional: pin a Coolify instance to a release
+### Optional: Coolify release settings
 
-Keep the existing application so its storage and routing stay attached. Back up `/app/data`, then resolve the desired release to its full commit SHA in a local checkout:
+Keep the existing application, `/compose.yaml`, environment, domain and `/app/data` volume. Back up the volume before redeploying. In **Source**, set **Branch** to `latest` and **Commit SHA** to `HEAD`. Select manual deployments under **Advanced > Deployment > Auto deploy** (older versions expose an Auto Deploy toggle), then save and redeploy. Each manual redeployment takes the latest stable release; commits on `main` are excluded. Confirm the commit in deployment logs, check `/healthz` and reconnect the MCP client.
 
-```sh
-git fetch origin --tags
-git rev-list -n 1 v1.0.0
-```
+To stay on one exact release instead, keep branch `main` and put the full output of `git rev-list -n 1 v1.0.0` in **Commit SHA** after fetching tags. Coolify's resource-group Tags are unrelated to Git release tags. Labels vary by version; see [source settings](https://github.com/coollabsio/coolify/blob/main/resources/views/livewire/project/application/source.blade.php) and [automatic deployments](https://coolify.io/docs/applications/deployments/automatic-deployments). Configure separate environment values and storage for any Preview instance.
 
-In the application's **Source** settings, keep the repository and `main` branch, replace **Commit SHA** (`HEAD` by default) with that full SHA, and save. Select manual deployments under **Advanced > Deployment > Auto deploy** (older versions expose an Auto Deploy toggle). Redeploy the same application, confirm the commit in deployment logs, then check `/healthz` and reconnect the MCP client. Update the pinned SHA deliberately when selecting a newer release. Coolify's resource-group Tags are unrelated to Git release tags.
+### Maintaining the stable release branch
 
-Use `/compose.yaml`, preserve the existing `/app/data` mount and domain, and keep `PUBLIC_URL` at the external HTTPS origin. If using Preview deployments, configure their separate environment values and storage too. See Coolify's [source settings](https://github.com/coollabsio/coolify/blob/main/resources/views/livewire/project/application/source.blade.php), [automatic deployments](https://coolify.io/docs/applications/deployments/automatic-deployments) and [environment variables](https://coolify.io/docs/applications/configuration/environment-variables). Labels depend on the installed Coolify version.
+The [release-channel workflow](../.github/workflows/release-channel.yml) advances `latest` to the tag's commit after a stable release is published and GitHub identifies it as the latest release. It ignores drafts, prereleases and other releases, and never force-pushes or changes version tags. Publish from `main`; keep development commits on `main` rather than merging them into `latest`. To initialize or resync the branch, run the workflow manually from GitHub Actions. Release events use the workflow stored in the release tag, so future release tags must include it; manual runs use `main`.
 
 ## Back up and restore
 
