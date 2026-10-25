@@ -1,11 +1,16 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { randomUUID } from 'node:crypto';
 
 export const PATTERN_PREVIEW_LENGTH = 600;
 
 export class KnowledgeError extends Error {}
+
+function requirePowerFx(mode) {
+  if (!['enabled', 'disabled'].includes(mode)) {
+    throw new KnowledgeError('Choose power_fx enabled or disabled. Call get_development_context first.');
+  }
+}
 
 // Small bilingual expansion; no model or external embedding service is required.
 const groups = [
@@ -34,9 +39,9 @@ export class KnowledgeStore {
     if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
     const version = this.db.prepare('PRAGMA user_version').get().user_version;
-    if (![0, 2, 3, 4, 5, 6].includes(version)) {
+    if (![0, 2, 3, 4, 5, 6, 7].includes(version)) {
       this.db.close();
-      throw new Error(`Unsupported database schema ${version}; expected 2, 3, 4, 5 or 6.`);
+      throw new Error(`Unsupported database schema ${version}; expected 2, 3, 4, 5, 6 or 7.`);
     }
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
     if (version === 0) this.db.exec(`
@@ -60,23 +65,6 @@ export class KnowledgeStore {
       PRAGMA user_version = 2;
       COMMIT;
     `);
-    // Additive migration: knowledge, revision history and the portable v2 format stay unchanged.
-    if (version < 3) try { this.db.exec(`
-      BEGIN IMMEDIATE;
-      CREATE TABLE development_contexts (
-        context_id TEXT PRIMARY KEY,
-        power_fx TEXT NOT NULL CHECK (power_fx IN ('enabled', 'disabled')),
-        created_at TEXT NOT NULL
-      );
-      CREATE TRIGGER immutable_development_context BEFORE UPDATE ON development_contexts
-        BEGIN SELECT RAISE(ABORT, 'Development contexts are immutable'); END;
-      PRAGMA user_version = 3;
-      COMMIT;
-    `); } catch (error) {
-      try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
-      this.db.close();
-      throw error;
-    }
     if (version < 4) try { this.db.exec(`
       BEGIN IMMEDIATE;
       CREATE TABLE api_keys (
@@ -126,43 +114,32 @@ export class KnowledgeStore {
       this.db.close();
       throw error;
     }
+    if (version < 7) try {
+      this.db.exec(`BEGIN IMMEDIATE;
+        DROP TRIGGER IF EXISTS immutable_development_context;
+        DROP TABLE IF EXISTS development_contexts;
+        PRAGMA user_version = 7;
+        COMMIT;`);
+    } catch (error) {
+      try { this.db.exec('ROLLBACK'); } catch { /* Transaction may not have started. */ }
+      this.db.close();
+      throw error;
+    }
   }
 
   close() { this.db.close(); }
   health() { this.db.prepare('SELECT 1').get(); }
 
-  developmentContext({ context_id, power_fx } = {}) {
-    if (power_fx !== undefined && !['enabled', 'disabled'].includes(power_fx)) {
-      throw new KnowledgeError('Choose power_fx enabled or disabled.');
-    }
-    if (context_id !== undefined) {
-      const existing = this.requireContext(context_id);
-      if (power_fx !== undefined && power_fx !== existing.power_fx) {
-        throw new KnowledgeError('The mode of this development context cannot change. Reuse it throughout this chat.');
-      }
-      return { status: 'ready', ...existing };
-    }
+  developmentContext({ power_fx } = {}) {
     if (power_fx === undefined) return { status: 'selection_required',
       question: 'Will this chat use PAD Classic (Power Fx disabled) or PAD with Power Fx enabled?' };
-    const context = { context_id: randomUUID(), power_fx, created_at: new Date().toISOString() };
-    this.db.prepare('INSERT INTO development_contexts (context_id, power_fx, created_at) VALUES (?, ?, ?)')
-      .run(context.context_id, context.power_fx, context.created_at);
-    return { status: 'ready', ...context };
-  }
-
-  requireContext(contextId) {
-    if (typeof contextId !== 'string' || !contextId) throw new KnowledgeError('A development context_id is required. Call get_development_context first.');
-    const context = this.db.prepare('SELECT * FROM development_contexts WHERE context_id = ?').get(contextId);
-    if (!context) throw new KnowledgeError('Development context not found.');
-    return { ...context };
+    requirePowerFx(power_fx);
+    return { status: 'ready', power_fx };
   }
 
   searchDevelopment(args, role) {
-    const context = this.requireContext(args.context_id);
-    if (args.power_fx !== undefined && args.power_fx !== context.power_fx) {
-      throw new KnowledgeError('Power Fx filter conflicts with the development context.');
-    }
-    const found = this.search({ ...args, power_fx: context.power_fx }, role);
+    requirePowerFx(args.power_fx);
+    const found = this.search(args, role);
     return { ...found, results: found.results.map(({ id, revision, content }) => {
       const problem = Array.from(content.problem);
       return { id, revision, kind: content.kind, title: content.title,
@@ -171,12 +148,12 @@ export class KnowledgeStore {
     }) };
   }
 
-  getDevelopmentPattern({ id, revision, context_id }) {
-    const context = this.requireContext(context_id);
+  getDevelopmentPattern({ id, revision, power_fx }) {
+    requirePowerFx(power_fx);
     // Development always reads a published revision, even for a Maintainer.
     const pattern = this.get(id, 'developer', revision);
-    if (![context.power_fx, 'either'].includes(pattern.content.power_fx)) {
-      throw new KnowledgeError('Pattern is not compatible with this development context.');
+    if (![power_fx, 'either'].includes(pattern.content.power_fx)) {
+      throw new KnowledgeError('Pattern is not compatible with the selected mode.');
     }
     return pattern;
   }

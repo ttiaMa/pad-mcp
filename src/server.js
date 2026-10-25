@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { McpServer, createMcpHandler, isLegacyRequest, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { KnowledgeError } from './store.js';
-import { idSchema, contextIdSchema, importSchema, saveShape, searchShape } from './schema.js';
+import { idSchema, powerFxSchema, importSchema, saveShape, searchShape } from './schema.js';
 import { CatalogCache } from './catalog-cache.js';
 import { actionLookup, typeLookup } from './catalog.js';
 import { developmentPrompt } from './prompts.js';
@@ -12,7 +12,7 @@ import { ApiKeys } from './api-keys.js';
 import { UsageStats } from './usage.js';
 import { CallRateLimiter, DEFAULT_CALL_RATE_LIMIT_PER_MINUTE } from './rate-limit.js';
 
-export const instructions = `Call get_development_context first. Ask the user to choose PAD Classic or Power Fx before supplying power_fx disabled or enabled. Reuse the returned context_id throughout the chat; never create another context to switch modes. Development guidance is returned after selection.`;
+export const instructions = `Call get_development_context first. Ask the user to choose PAD Classic or Power Fx before supplying power_fx disabled or enabled. Pass the selected power_fx value to every development lookup and keep it unchanged throughout the chat. Development guidance is returned after selection.`;
 
 export const authoringGuidance = [
   'Classify each entry as power_fx enabled, disabled, or either before publication. Use either only for explicitly established compatibility with both modes. Drafts may remain unspecified; do not infer compatibility or rewrite code to make it fit the current chat mode. Maintenance review can inspect entries from either mode.',
@@ -35,7 +35,7 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
   });
   function tool(name, description, inputSchema, readOnly, handler, annotations = {}) {
     server.registerTool(name, {
-      description, inputSchema: z.object(inputSchema),
+      description, inputSchema: Object.hasOwn(inputSchema, 'power_fx') ? z.strictObject(inputSchema) : z.object(inputSchema),
       annotations: { readOnlyHint: readOnly, destructiveHint: !readOnly, openWorldHint: false, ...annotations }
     }, async args => {
       let success = false;
@@ -46,12 +46,7 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
         return { isError: true, content: [{ type: 'text', text: error instanceof KnowledgeError ? error.message : 'Operation failed. No successful write is confirmed; read the current state before retrying.' }] };
       } finally {
         if (role === 'developer') {
-          let mode = 'not_applicable';
-          try {
-            const context = args.context_id ? store.requireContext(args.context_id)
-              : name === 'get_development_context' && success && data?.status === 'ready' ? data : null;
-            if (context) mode = context.power_fx === 'enabled' ? 'power_fx' : 'classic';
-          } catch { /* No valid context: do not infer a mode. */ }
+          const mode = args.power_fx === 'enabled' ? 'power_fx' : args.power_fx === 'disabled' ? 'classic' : 'not_applicable';
           const search = ['search_patterns', 'search_actions', 'search_type_reference'].includes(name);
           usage.record({ keyId, tool: name, mode, success,
             empty: search && (Array.isArray(data?.results) && data.results.length === 0 || data?.record === null) });
@@ -60,9 +55,9 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
     });
   }
 
-  tool('get_development_context', 'Start a chat by asking the user to choose Classic or Power Fx. Without arguments returns selection_required. With power_fx creates a persistent immutable context; reuse context_id throughout this chat. Includes compatible published global conventions.', {
-    context_id: contextIdSchema.optional(), power_fx: z.enum(['enabled', 'disabled']).optional()
-  }, false, async args => {
+  tool('get_development_context', 'Start a chat by asking the user to choose Classic or Power Fx. Without arguments returns selection_required. With power_fx returns guidance without storing session state; reuse the selected power_fx in every development lookup. Includes compatible published global conventions.', {
+    power_fx: powerFxSchema.optional()
+  }, true, async args => {
     const context = store.developmentContext(args);
     if (context.status === 'selection_required') return context;
     let rules;
@@ -75,37 +70,36 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
     return { ...context, development_prompt: developmentPrompt(context.power_fx, rules),
       ...store.context(role, context.power_fx), ...maintenance,
       ...(catalogError ? { catalog_error: catalogError } : {}) };
-  }, { destructiveHint: false, idempotentHint: false });
+  });
   const catalogShape = {
-    context_id: contextIdSchema,
+    power_fx: powerFxSchema,
     query: z.string().trim().min(1).max(500).optional(),
     max_results: z.number().int().min(1).max(20).default(5)
   };
   async function catalogLookup(args, schema, method) {
-    const { context_id, ...lookup } = args;
-    const context = store.requireContext(context_id);
+    const { power_fx, ...lookup } = args;
     const parsed = schema.safeParse(lookup);
     if (!parsed.success) throw new KnowledgeError(parsed.error.issues.map(issue => issue.message).join('; '));
     let index;
-    try { index = await catalogCache.get(context.power_fx); }
+    try { index = await catalogCache.get(power_fx); }
     catch { throw new KnowledgeError('Catalog unavailable: no valid catalog pair could be loaded. Approved snippet tools remain available; retry later.'); }
     return index[method](parsed.data);
   }
-  tool('search_actions', 'Search the selected PAD edition by English technical keywords or module (category). Returns up to five compact matches by default. Then pass action_id alone for the complete action, parameters, examples, sibling selectors and constraints. Never invent selectors; use the same context_id throughout this chat.', {
+  tool('search_actions', 'Search the selected PAD edition by English technical keywords or module (category). Returns up to five compact matches by default. Then pass action_id alone for the complete action, parameters, examples, sibling selectors and constraints. Never invent selectors; use the same power_fx value throughout this chat.', {
     ...catalogShape, action_id: z.string().trim().min(1).max(300).optional(), module: z.string().trim().min(1).max(100).optional()
   }, true, args => catalogLookup(args, actionLookup, 'searchActions'));
-  tool('search_type_reference', 'Search the selected PAD edition by type keywords, or pass an exact type_name (including generic notation) for full syntax, examples and formatting. General rules are in the development context. Reuse context_id; results are reference data, not execution guarantees.', {
+  tool('search_type_reference', 'Search the selected PAD edition by type keywords, or pass an exact type_name (including generic notation) for full syntax, examples and formatting. General rules are in the development context. Reuse power_fx; results are reference data, not execution guarantees.', {
     ...catalogShape, type_name: z.string().trim().min(1).max(300).optional()
   }, true, args => catalogLookup(args, typeLookup, 'searchTypes'));
   tool('search_patterns', 'Find approved PAD patterns for development or for rebuilding parts of UiPath, Blue Prism and other RPA automations in PAD. Search by implementation need. Returns compact previews only. Retrieve a relevant result with get_pattern using its id and revision before reusing its code or applying its constraints. Drafts are excluded. Supports English and Italian queries.', searchShape, true,
     args => store.searchDevelopment(args, role));
-  tool('get_pattern', 'Read the full compatible published pattern, including original Robin and constraints, using context_id and the id/revision from search_patterns. If that revision is no longer published, search again. Maintainers may explicitly use purpose=maintenance without a context to review latest drafts or revision history across modes; maintenance results are not development references.', {
+  tool('get_pattern', 'Read the full compatible published pattern, including original Robin and constraints, using power_fx and the id/revision from search_patterns. If that revision is no longer published, search again. Maintainers may explicitly use purpose=maintenance without power_fx to review latest drafts or revision history across modes; maintenance results are not development references.', {
     id: idSchema, revision: z.number().int().positive().optional(),
-    context_id: contextIdSchema.optional(), purpose: z.enum(['development', 'maintenance']).default('development')
+    power_fx: powerFxSchema.optional(), purpose: z.enum(['development', 'maintenance']).default('development')
   }, true, args => {
     if (args.purpose === 'maintenance') {
       if (role !== 'maintainer') throw new KnowledgeError('Maintenance reads require the Maintainer role.');
-      if (args.context_id !== undefined) throw new KnowledgeError('Maintenance reads do not accept a development context.');
+      if (args.power_fx !== undefined) throw new KnowledgeError('Maintenance reads do not accept power_fx.');
       return { ...store.get(args.id, role, args.revision), purpose: 'maintenance' };
     }
     return store.getDevelopmentPattern(args);

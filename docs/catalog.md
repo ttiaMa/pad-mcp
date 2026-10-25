@@ -35,7 +35,7 @@ Previously downloaded snapshots and check records are retained on disk but ignor
 
 ## Stage 3: fixed-mode development contexts
 
-MCP knowledge tools use persistent immutable contexts and mode filters. Contexts were introduced in schema 3; see [Database initialization](deployment.md#database-initialization) for the current schema and upgrade behavior. Knowledge exports remain version 2. New publication requires explicit mode classification. See [Initial context](usage.md#initial-context) for the changed tool contract and client reconnection requirements. No live database reset or reimport is required.
+MCP knowledge tools require an explicit power_fx mode for each development lookup. Schema 7 removes the old persistent contexts; see [Database initialization](deployment.md#database-initialization) for the current schema and upgrade behavior. Knowledge exports remain version 2. New publication requires explicit mode classification. See [Initial context](usage.md#initial-context) for the changed tool contract and client reconnection requirements. No live database reset or reimport is required.
 
 ## Stage 4: MCP tools and reviewed prompts
 
@@ -45,4 +45,4 @@ The context tool loads shared guidance and only the selected edition's prompt, w
 
 ## Verification
 
-`npm run check` covers the new modules. `npm test` exercises local parsing, exact and bounded retrieval, bundle integrity and manual repair, schema migration, immutable contexts, publication classification and HTTP MCP integration for both modes and roles. Tests use temporary local data; no approved remote knowledge is mutated. No automated check executes PAD flows or proves cloud-trigger compatibility.
+`npm run check` covers the new modules. `npm test` exercises local parsing, exact and bounded retrieval, bundle integrity and manual repair, schema migration, stateless mode selection, publication classification and HTTP MCP integration for both modes and roles. Tests use temporary local data; no approved remote knowledge is mutated. No automated check executes PAD flows or proves cloud-trigger compatibility.

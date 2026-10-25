@@ -28,7 +28,7 @@ function toolData(response) {
   return JSON.parse(response.content[0].text);
 }
 
-const testContexts = new WeakMap();
+const testModes = new WeakMap();
 const testRoles = new WeakMap();
 
 async function setup(t, dependencies = { catalogCache: { get: async mode => new CatalogIndex({ ...documents(mode, 'a'), power_fx: mode }) } }, protocolMode = 'legacy') {
@@ -51,7 +51,7 @@ async function setup(t, dependencies = { catalogCache: { get: async mode => new 
     }));
     const context = await client.callTool({ name: 'get_development_context', arguments: { power_fx: 'enabled' } });
     assert.ok(!context.isError);
-    testContexts.set(client, toolData(context).context_id);
+    testModes.set(client, toolData(context).power_fx);
     testRoles.set(client, token === config.maintainerToken ? 'maintainer' : 'developer');
     return client;
   }
@@ -59,12 +59,12 @@ async function setup(t, dependencies = { catalogCache: { get: async mode => new 
 }
 
 async function call(client, name, args = {}) {
-  // Existing workflow tests use an explicit, previously selected Power Fx context.
+  // Existing workflow tests use an explicit, previously selected Power Fx mode.
   if (name === 'search_patterns' || (name === 'get_development_context' && Object.keys(args).length === 0)) {
-    args = { context_id: testContexts.get(client), ...args };
+    args = { power_fx: testModes.get(client), ...args };
   }
   if (name === 'get_pattern') {
-    args = { ...(testRoles.get(client) === 'maintainer' ? { purpose: 'maintenance' } : { context_id: testContexts.get(client) }), ...args };
+    args = { ...(testRoles.get(client) === 'maintainer' ? { purpose: 'maintenance' } : { power_fx: testModes.get(client) }), ...args };
   }
   const response = await client.callTool({ name, arguments: args });
   assert.ok(!response.isError, JSON.stringify(response));
@@ -86,7 +86,7 @@ test('real MCP handshake, instructions and server-side tool permissions', async 
   assert.equal((await call(maintainer, 'list_patterns')).entries.length, 0);
 });
 
-test('2026 clients keep the same tools, contexts, publication workflow and role boundaries', async t => {
+test('2026 clients keep the same tools, modes, publication workflow and role boundaries', async t => {
   const { maintainer, developer, store, url, developerToken } = await setup(t, undefined, { pin: '2026-07-28' });
   assert.equal(maintainer.getProtocolEra(), 'modern');
   assert.equal(developer.getProtocolEra(), 'modern');
@@ -94,17 +94,17 @@ test('2026 clients keep the same tools, contexts, publication workflow and role 
   assert.equal(toolData(await developer.callTool({ name: 'get_development_context', arguments: {} })).status, 'selection_required');
   const classic = await call(developer, 'get_development_context', { power_fx: 'disabled' });
   assert.equal(classic.power_fx, 'disabled');
-  assert.equal((await developer.callTool({ name: 'get_development_context', arguments: { context_id: classic.context_id, power_fx: 'enabled' } })).isError, true);
-  assert.ok((await call(developer, 'search_actions', { context_id: classic.context_id, query: 'text' })).results.length > 0);
+  assert.equal('context_id' in classic, false);
+  assert.ok((await call(developer, 'search_actions', { power_fx: classic.power_fx, query: 'text' })).results.length > 0);
 
-  // Both eras can use the same persisted context, without a protocol session.
+  // Both eras accept the same explicit mode, without a protocol session.
   const legacy = await fetch(`${url}/mcp`, { method: 'POST',
     headers: { Authorization: `Bearer ${developerToken}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-11-25' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_development_context', arguments: { context_id: classic.context_id } } }) });
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'get_development_context', arguments: { power_fx: classic.power_fx } } }) });
   assert.equal(legacy.status, 200);
   assert.match(legacy.headers.get('content-type'), /application\/json/);
   assert.equal(legacy.headers.get('mcp-session-id'), null);
-  assert.equal(toolData((await legacy.json()).result).context_id, classic.context_id);
+  assert.equal(toolData((await legacy.json()).result).power_fx, classic.power_fx);
 
   await save(maintainer, 'modern-pattern');
   assert.equal((await call(developer, 'search_patterns', { query: 'pagination' })).results.length, 0);
@@ -187,7 +187,7 @@ test('draft -> exact publication -> new draft preserves published code and revis
   assert.equal(conflict.isError, true);
   await publish(maintainer, 'pagination', 2);
   assert.equal((await call(developer, 'search_patterns', { query: 'pagination' })).results[0].revision, 2);
-  const hidden = await developer.callTool({ name: 'get_pattern', arguments: { id: 'pagination', revision: 1, context_id: testContexts.get(developer) } });
+  const hidden = await developer.callTool({ name: 'get_pattern', arguments: { id: 'pagination', revision: 1, power_fx: testModes.get(developer) } });
   assert.equal(hidden.isError, true);
   assert.equal((await call(maintainer, 'get_pattern', { id: 'pagination', revision: 1 })).content.robin_code, code);
 });
@@ -197,7 +197,7 @@ test('all published content is shared; drafts remain outside Developer retrieval
   await save(maintainer, 'team-convention', { kind: 'convention', area: 'global' });
   assert.equal((await call(developer, 'get_development_context')).conventions.length, 0);
   assert.equal((await call(developer, 'export_knowledge')).entries.length, 0);
-  const hidden = await developer.callTool({ name: 'get_pattern', arguments: { id: 'team-convention', context_id: testContexts.get(developer) } });
+  const hidden = await developer.callTool({ name: 'get_pattern', arguments: { id: 'team-convention', power_fx: testModes.get(developer) } });
   assert.equal(hidden.isError, true);
   await publish(maintainer, 'team-convention');
   assert.equal((await call(developer, 'get_development_context')).conventions.length, 1);
@@ -239,7 +239,7 @@ test('search handles hostile FTS syntax, no matches, and Power Fx compatibility 
   await save(maintainer, 'fx', { power_fx: 'enabled', area: 'lists' });
   await publish(maintainer, 'fx');
   const classic = await call(maintainer, 'get_development_context', { power_fx: 'disabled' });
-  assert.equal((await call(maintainer, 'search_patterns', { query: 'pagination', context_id: classic.context_id })).results.length, 0);
+  assert.equal((await call(maintainer, 'search_patterns', { query: 'pagination', power_fx: classic.power_fx })).results.length, 0);
   assert.equal((await call(maintainer, 'search_patterns', { query: 'pagination', power_fx: 'enabled', area: 'lists' })).results.length, 1);
   assert.equal((await call(maintainer, 'search_patterns', { query: 'xyznonexistent' })).results.length, 0);
   assert.equal((await call(maintainer, 'search_patterns', { query: '" OR * : ( )' })).results.length, 0);
@@ -293,7 +293,7 @@ test('development content stays lean through MCP schemas, storage, retrieval and
   for (const client of [maintainer, developer]) {
     assert.deepEqual((await call(client, 'get_pattern', { id: 'lean' })).content, original);
     // Full content remains searchable server-side, including limitations.
-    const response = await client.callTool({ name: 'search_patterns', arguments: { query: 'limitationuniqueterm', context_id: testContexts.get(client) } });
+    const response = await client.callTool({ name: 'search_patterns', arguments: { query: 'limitationuniqueterm', power_fx: testModes.get(client) } });
     assert.deepEqual(toolData(response).results[0], { id: 'lean', revision: 1, kind: original.kind, title: original.title, problem: original.problem });
     assert.deepEqual((await call(client, 'get_development_context')).conventions[0].content, original);
     const exported = await call(client, 'export_knowledge');
@@ -315,7 +315,7 @@ test('development content stays lean through MCP schemas, storage, retrieval and
 test('unsupported database formats are rejected without changing the file', t => {
   const dir = mkdtempSync(join(tmpdir(), 'pad-mcp-format-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  for (const version of [1, 7]) {
+  for (const version of [1, 8]) {
     const file = join(dir, `version-${version}.sqlite`);
     const db = new DatabaseSync(file);
     db.exec(`CREATE TABLE sample_content (content TEXT); PRAGMA user_version = ${version};`);
@@ -333,7 +333,7 @@ test('SQLite re-open preserves drafts, original bytes, approved revision and ful
   try {
     const file = join(dir, 'knowledge.sqlite');
     store = new KnowledgeStore(file);
-    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 6);
+    assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 7);
     assert.deepEqual(store.db.prepare('PRAGMA table_info(patterns)').all().map(column => column.name), ['id', 'latest_revision', 'published_revision']);
     assert.deepEqual(store.export({}), { schema_version: 2, entries: [], next_offset: null });
     store.saveDraft({ id: 'persisted', expected_revision: 0, content: content() });
@@ -415,7 +415,7 @@ test('approved replacement updates retrieval atomically while retaining Maintain
   assert.equal((await call(developer, 'search_patterns', { query: 'legacyuniqueterm' })).results.length, 0);
   assert.equal((await call(developer, 'search_patterns', { query: 'replacementuniqueterm' })).results[0].revision, 2);
   assert.equal((await call(developer, 'export_knowledge')).entries[0].revision, 2);
-  const oldRevision = await developer.callTool({ name: 'get_pattern', arguments: { id: 'maintained', revision: 1, context_id: testContexts.get(developer) } });
+  const oldRevision = await developer.callTool({ name: 'get_pattern', arguments: { id: 'maintained', revision: 1, power_fx: testModes.get(developer) } });
   assert.equal(oldRevision.isError, true);
   const stale = await maintainer.callTool({ name: 'replace_pattern', arguments: { id: 'maintained', expected_revision: 1, content: replacement } });
   assert.equal(stale.isError, true);
@@ -468,20 +468,17 @@ test('database failures roll back replacement and deletion, including revisions 
   } finally { store.close(); }
 });
 
-test('MCP selection is explicit, context mode is immutable and development cannot bypass filtering', async t => {
+test('MCP selection is explicit, mode is stateless and development cannot bypass filtering', async t => {
   const { maintainer, developer, store } = await setup(t);
-  const initialCount = store.db.prepare('SELECT COUNT(*) AS n FROM development_contexts').get().n;
+
   const initial = await developer.callTool({ name: 'get_development_context', arguments: {} });
   assert.equal(toolData(initial).status, 'selection_required');
   assert.equal('conventions' in toolData(initial), false);
-  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM development_contexts').get().n, initialCount);
+  assert.equal(store.db.prepare("SELECT name FROM sqlite_master WHERE name = 'development_contexts'").get(), undefined);
   const classic = await call(developer, 'get_development_context', { power_fx: 'disabled' });
   const fx = await call(developer, 'get_development_context', { power_fx: 'enabled' });
-  assert.notEqual(classic.context_id, fx.context_id);
-  assert.equal((await call(developer, 'get_development_context', { context_id: classic.context_id })).power_fx, 'disabled');
-  const changed = await developer.callTool({ name: 'get_development_context', arguments: { context_id: classic.context_id, power_fx: 'enabled' } });
-  assert.equal(changed.isError, true);
-  assert.equal(store.requireContext(classic.context_id).power_fx, 'disabled');
+  assert.notEqual(classic.power_fx, fx.power_fx);
+  assert.equal((await call(developer, 'get_development_context', { power_fx: classic.power_fx })).power_fx, 'disabled');
   for (const mode of ['enabled', 'disabled', 'either']) {
     await save(maintainer, mode, { power_fx: mode, kind: 'convention', area: 'global' });
     await publish(maintainer, mode);
@@ -491,34 +488,45 @@ test('MCP selection is explicit, context mode is immutable and development canno
   await publish(maintainer, 'legacy');
   store.db.prepare("UPDATE revisions SET content = json_set(content, '$.power_fx', 'unspecified') WHERE id = ?").run('legacy');
   for (const context of [classic, fx]) {
-    const found = await call(developer, 'search_patterns', { context_id: context.context_id, query: 'pagination' });
+    const found = await call(developer, 'search_patterns', { power_fx: context.power_fx, query: 'pagination' });
     assert.deepEqual(found.results.map(entry => entry.id).sort(), [context.power_fx, 'either'].sort());
-    const loaded = await call(developer, 'get_development_context', { context_id: context.context_id });
+    const loaded = await call(developer, 'get_development_context', { power_fx: context.power_fx });
     assert.deepEqual(loaded.conventions.map(entry => entry.id).sort(), [context.power_fx, 'either'].sort());
   }
   for (const [name, args] of [
     ['search_patterns', { query: 'pagination' }],
-    ['search_patterns', { query: 'pagination', context_id: classic.context_id, power_fx: 'enabled' }],
+    ['search_patterns', { query: 'pagination', power_fx: 'enabled', context_id: 'obsolete' }],
     ['get_pattern', { id: 'enabled' }],
-    ['get_pattern', { id: 'enabled', context_id: classic.context_id }],
-    ['get_pattern', { id: 'legacy', context_id: fx.context_id }],
+    ['get_pattern', { id: 'enabled', power_fx: classic.power_fx }],
+    ['get_pattern', { id: 'legacy', power_fx: fx.power_fx }],
     ['get_pattern', { id: 'disabled', purpose: 'maintenance' }],
-    ['get_development_context', { context_id: '00000000-0000-4000-8000-000000000000' }]
+    ['get_development_context', { power_fx: '00000000-0000-4000-8000-000000000000' }]
   ]) {
     assert.equal((await developer.callTool({ name, arguments: args })).isError, true, name);
   }
   // Maintainer development is also filtered and must not return newer drafts.
   await save(maintainer, 'enabled', { power_fx: 'disabled', robin_code: 'draft only' }, 1);
-  const published = await maintainer.callTool({ name: 'get_pattern', arguments: { id: 'enabled', context_id: fx.context_id } });
+  const published = await maintainer.callTool({ name: 'get_pattern', arguments: { id: 'enabled', power_fx: fx.power_fx } });
   assert.equal(toolData(published).revision, 1);
-  const wrongMode = await maintainer.callTool({ name: 'get_pattern', arguments: { id: 'enabled', context_id: classic.context_id } });
+  const wrongMode = await maintainer.callTool({ name: 'get_pattern', arguments: { id: 'enabled', power_fx: classic.power_fx } });
   assert.equal(wrongMode.isError, true);
   const review = await call(maintainer, 'get_pattern', { id: 'enabled', purpose: 'maintenance' });
   assert.equal(review.revision, 2);
   assert.equal(review.purpose, 'maintenance');
   assert.equal((await call(maintainer, 'get_pattern', { id: 'legacy' })).content.power_fx, 'unspecified');
+  for (const tool of (await developer.listTools()).tools) {
+    assert.equal('context_id' in tool.inputSchema.properties, false);
+    if ('power_fx' in tool.inputSchema.properties) {
+      const stale = await developer.callTool({ name: tool.name, arguments: {
+        power_fx: 'enabled', context_id: 'obsolete',
+        ...(tool.name === 'get_pattern' ? { id: 'enabled' } : {}),
+        ...(['search_patterns', 'search_actions', 'search_type_reference'].includes(tool.name) ? { query: 'text' } : {})
+      } });
+      assert.equal(stale.isError, true, tool.name);
+    }
+  }
   const tool = (await developer.listTools()).tools.find(entry => entry.name === 'get_development_context');
-  assert.equal(tool.annotations.readOnlyHint, false);
+  assert.equal(tool.annotations.readOnlyHint, true);
   assert.equal(tool.annotations.destructiveHint, false);
   assert.equal((await call(developer, 'export_knowledge')).entries.length, 4);
 });
@@ -552,12 +560,12 @@ test('catalog MCP tools use bundled catalogs, selected edition and bounded respo
   await writeBundle(bundle_directory);
   const catalogCache = new CatalogCache({ bundle_directory });
   const { developer, maintainer, store } = await setup(t, { catalogCache });
-  const fx = testContexts.get(developer);
-  const classic = (await call(developer, 'get_development_context', { power_fx: 'disabled' })).context_id;
-  const fxPrompt = await call(developer, 'get_development_context', { context_id: fx });
+  const fx = testModes.get(developer);
+  const classic = (await call(developer, 'get_development_context', { power_fx: 'disabled' })).power_fx;
+  const fxPrompt = await call(developer, 'get_development_context', { power_fx: fx });
   assert.match(fxPrompt.development_prompt, /Selected mode: PAD with Power Fx enabled/);
   assert.doesNotMatch(fxPrompt.development_prompt, /Selected mode: PAD Classic/);
-  assert.match((await call(developer, 'get_development_context', { context_id: classic })).development_prompt, /Selected mode: PAD Classic/);
+  assert.match((await call(developer, 'get_development_context', { power_fx: classic })).development_prompt, /Selected mode: PAD Classic/);
   for (const client of [developer, maintainer]) {
     const tools = (await client.listTools()).tools;
     for (const name of ['search_actions', 'search_type_reference']) {
@@ -568,26 +576,26 @@ test('catalog MCP tools use bundled catalogs, selected edition and bounded respo
   }
   for (const [name, args] of [
     ['search_actions', { query: 'text' }],
-    ['search_actions', { context_id: fx }],
-    ['search_actions', { context_id: fx, action_id: 'Text.Action0', query: 'text' }],
-    ['search_type_reference', { context_id: fx, type_name: 'String', query: 'text' }],
-    ['search_actions', { context_id: '00000000-0000-4000-8000-000000000000', query: 'text' }]
+    ['search_actions', { power_fx: fx }],
+    ['search_actions', { power_fx: fx, action_id: 'Text.Action0', query: 'text' }],
+    ['search_type_reference', { power_fx: fx, type_name: 'String', query: 'text' }],
+    ['search_actions', { power_fx: '00000000-0000-4000-8000-000000000000', query: 'text' }]
   ]) assert.equal((await developer.callTool({ name, arguments: args })).isError, true);
   const summaries = await Promise.all([developer, maintainer].map(client =>
-    call(client, 'search_actions', { context_id: fx, module: 'Text' })));
+    call(client, 'search_actions', { power_fx: fx, module: 'Text' })));
   assert.equal(summaries[0].results.length, 5);
   assert.equal(summaries[0].truncated, true);
   assert.equal('golden_example' in summaries[0].results[0], false);
   for (const [id, mode] of [[fx, 'enabled'], [classic, 'disabled']]) {
-    const exact = await call(developer, 'search_actions', { context_id: id, action_id: 'Text.Action0' });
+    const exact = await call(developer, 'search_actions', { power_fx: id, action_id: 'Text.Action0' });
     assert.equal(exact.record.golden_example, mode + '-a');
     assert.equal('source' in exact, false);
     assert.equal('development_prompt' in exact, false);
     assert.deepEqual(Object.keys(exact), ['record']);
-    const context = await call(developer, 'get_development_context', { context_id: id });
+    const context = await call(developer, 'get_development_context', { power_fx: id });
     const rules = JSON.parse(context.development_prompt.split('Catalog rules for the selected mode:\n')[1]);
     assert.deepEqual(rules, (await catalogCache.get(mode)).developmentRules());
-    const type = await call(developer, 'search_type_reference', { context_id: id, type_name: 'String' });
+    const type = await call(developer, 'search_type_reference', { power_fx: id, type_name: 'String' });
     assert.equal(type.record.example, mode + '-a');
   }
   assert.equal('catalog_update' in (await call(maintainer, 'get_development_context')), false);
@@ -625,7 +633,7 @@ test('pattern previews are bounded, preserve Unicode and retrieve only the selec
   assert.deepEqual(selected, { id: 'long-preview', revision: 1, kind: original.kind,
     title: original.title, problem: '😀'.repeat(PATTERN_PREVIEW_LENGTH), problem_truncated: true });
   assert.equal('problem_truncated' in search.results.find(item => item.id === 'other-preview'), false);
-  const args = { context_id: testContexts.get(developer), id: selected.id, revision: selected.revision };
+  const args = { power_fx: testModes.get(developer), id: selected.id, revision: selected.revision };
   assert.deepEqual((await call(developer, 'get_pattern', args)).content, original);
   await save(maintainer, 'long-preview', { problem: 'Replacement', robin_code: 'NEW CODE' }, 1);
   // A newer draft does not invalidate the selected published revision.
@@ -638,7 +646,7 @@ test('pattern previews are bounded, preserve Unicode and retrieve only the selec
 
 test('catalog failure is a tool error and leaves context and approved patterns usable', async t => {
   const { developer, maintainer } = await setup(t, { catalogCache: { get: async () => { throw new Error('Unavailable'); } } });
-  const result = await developer.callTool({ name: 'search_actions', arguments: { context_id: testContexts.get(developer), query: 'text' } });
+  const result = await developer.callTool({ name: 'search_actions', arguments: { power_fx: testModes.get(developer), query: 'text' } });
   assert.equal(result.isError, true);
   assert.match(result.content[0].text, /Catalog unavailable/);
   await save(maintainer, 'available'); await publish(maintainer, 'available');

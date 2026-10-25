@@ -43,10 +43,10 @@ test('v5 cleanup removes disabled keys and obsolete storage while preserving act
   assert.deepEqual(updated.list().map(key => key.id), [active.id]);
   assert.equal(store.db.prepare('PRAGMA table_info(api_keys)').all().some(column => column.name === 'disabled_at'), false);
   assert.equal(store.db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'api_keys_bootstrap'").get(), undefined);
-  assert.deepEqual(store.developmentContext({ context_id: context.context_id }), context);
+  assert.deepEqual(store.developmentContext({ power_fx: context.power_fx }), context);
   assert.deepEqual(store.get('keep', 'maintainer'), original);
   assert.equal(new UsageStats(store.db).report().summary.calls, 1);
-  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 6);
+  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 7);
 });
 
 test('keys persist as hashes, have no expiry, and deletion removes the record permanently', t => {
@@ -78,7 +78,7 @@ test('keys persist as hashes, have no expiry, and deletion removes the record pe
   assert.equal(keys.list().length, 1);
 });
 
-test('v3 migration preserves knowledge and immutable contexts', t => {
+test('v3 migration preserves knowledge and mode selection', t => {
   const path = fixture();
   let store = new KnowledgeStore(path);
   t.after(() => { store.close(); rmSync(dirname(path), { recursive: true, force: true }); });
@@ -87,9 +87,9 @@ test('v3 migration preserves knowledge and immutable contexts', t => {
   store.db.exec('DROP TABLE usage_daily; DROP TABLE api_keys; PRAGMA user_version = 3;');
   store.close();
   store = new KnowledgeStore(path);
-  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 6);
+  assert.equal(store.db.prepare('PRAGMA user_version').get().user_version, 7);
   assert.deepEqual(store.export({}), before);
-  assert.deepEqual(store.developmentContext({ context_id: context.context_id }), context);
+  assert.deepEqual(store.developmentContext({ power_fx: context.power_fx }), context);
 });
 
 test('CLI changes are visible to a running server and developer keys cannot invoke maintainer tools', async t => {

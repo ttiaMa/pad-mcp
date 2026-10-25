@@ -14,10 +14,10 @@ Successful tool results contain one JSON payload in a single MCP text content bl
 
 | Tool | Role | Purpose |
 | --- | --- | --- |
-| `get_development_context` | Both | Select a fixed mode, create/resume a persistent context and load up to 20 compatible global conventions |
-| `search_patterns` | Both | Find previews of compatible approved patterns using required `context_id`, with optional area/kind filters |
-| `get_pattern` | Both | Read a compatible published entry using `context_id`; Maintainers can explicitly request maintenance review |
-| `search_actions` | Both | Search the context's catalog by keywords/module; retrieve a complete action by exact `action_id` |
+| `get_development_context` | Both | Load guidance and up to 20 compatible global conventions for the selected mode, without session storage |
+| `search_patterns` | Both | Find previews of compatible approved patterns using required `power_fx`, with optional area/kind filters |
+| `get_pattern` | Both | Read a compatible published entry using `power_fx`; Maintainers can explicitly request maintenance review |
+| `search_actions` | Both | Search the selected mode's catalog by keywords/module; retrieve a complete action by exact `action_id` |
 | `search_type_reference` | Both | Search type summaries or retrieve formatting by exact `type_name` |
 | `export_knowledge` | Both | Export all published entries |
 | `get_usage_stats` | Maintainer | Read aggregate Developer usage by day, tool, mode or key; see [Usage statistics](usage-statistics.md) |
@@ -29,7 +29,7 @@ Successful tool results contain one JSON payload in a single MCP text content bl
 | `delete_pattern` | Maintainer | Permanently remove an entry and all its revisions from the live database |
 | `import_knowledge` | Maintainer | Import up to 20 entries as drafts |
 
-Both roles use the same published collection. Development reads return compatible current published revisions. Maintainers can inspect drafts and history with `get_pattern` and `purpose: "maintenance"`, without `context_id`; the response is marked as maintenance content. Developers cannot invoke knowledge mutation tools or maintenance reads, even by name. Both roles may create development contexts. All access still requires authentication; a context ID grants no authorization.
+Both roles use the same published collection. Development reads return compatible current published revisions. Maintainers can inspect drafts and history with `get_pattern` and `purpose: "maintenance"`, without `power_fx`; the response is marked as maintenance content. Developers cannot invoke knowledge mutation tools or maintenance reads, even by name. Both roles may load development guidance. All access still requires authentication.
 
 ## Reference catalog versions
 
@@ -89,7 +89,7 @@ A revision conflict rejects the operation. Read the current state before retryin
 
 Search returns at most three previews by default (maximum ten): `id`, `revision`, `kind`, `title` and `problem`. The problem excerpt is capped at 600 Unicode code points; `problem_truncated: true` appears only when shortened. Code and detailed constraints stay out of search responses. Full content remains indexed and area/kind/mode filters still apply.
 
-Choose the relevant preview, then call `get_pattern({ context_id, id, revision })` to retrieve its original code and complete usage constraints. There is no need to fetch every search result. If the selected revision has since been replaced or withdrawn, retrieval fails: search again instead of silently using a different revision. Global conventions in the initial context and portable exports still contain full content.
+Choose the relevant preview, then call `get_pattern({ power_fx, id, revision })` to retrieve its original code and complete usage constraints. There is no need to fetch every search result. If the selected revision has since been replaced or withdrawn, retrieval fails: search again instead of silently using a different revision. Global conventions in the initial context and portable exports still contain full content.
 
 ## Initial context
 
@@ -97,27 +97,27 @@ Fixed server instructions and base guidance are in `src/server.js`. Changing the
 
 Editable development conventions are entries with `kind=convention` and `area=global`. Publish them through the same tools as snippets; the next `get_development_context` call reads the updated database content. All published conventions are shared with Developers. Long collections are capped at 20 global conventions per context response.
 
-At the start of each chat, call `get_development_context({})`: it returns `status: "selection_required"` and the mode question only, for both roles. Ask the user whether the chat uses Classic or Power Fx, then call it with `power_fx: "disabled"` or `"enabled"`. The response contains a persistent `context_id`. Reuse that ID throughout the chat; it cannot change mode. To reload compatible conventions, call `get_development_context({ context_id })`.
+At the start of each chat, call `get_development_context({})`: it returns `status: "selection_required"` and the mode question only, for both roles. Ask the user whether the chat uses Classic or Power Fx, then call it with `power_fx: "disabled"` or `"enabled"`. The response contains compatible guidance and conventions without creating or storing a session. Repeat the same call to reload guidance.
 
-Pass `context_id` to every `search_patterns` and development `get_pattern` call. The server derives the mode from the context, including for Maintainers. An optional `power_fx` search argument is only a consistency check: a conflicting value fails. Mode-specific entries from the other edition and `unspecified` entries are excluded; `either` is included. Conventions are filtered before the 20-entry limit. Search and detail responses do not repeat the initial instructions.
+Pass that same `power_fx` value to every `search_patterns`, `search_actions`, `search_type_reference` and development `get_pattern` call. The agent keeps the initial choice throughout the conversation; the stateless server validates each request independently and cannot enforce a fixed choice across calls. Missing or invalid modes fail rather than defaulting to an edition. Mode-specific entries from the other edition and `unspecified` entries are excluded; `either` is included, even for Maintainers. Conventions are filtered before the 20-entry limit. Search and detail responses do not repeat the initial instructions.
 
-The server enforces immutable contexts, not chat identity: the agent must not create another context to switch modes within the same chat. Contexts survive restart and are separate from knowledge import/export. See [Database initialization](deployment.md#database-initialization) for the current SQLite schema and upgrade behavior. The portable JSON format remains version 2. Original content, revisions and knowledge bootstrap state are not rewritten. Reconnect clients after upgrading so they load the changed tool schemas; older calls without a context now fail.
+Schema 7 removes the former context table and its rows automatically on startup, preserving knowledge, revision history, API keys and statistics. Reconnect clients after upgrading to reload the tool schemas: old `context_id` arguments are no longer accepted. Portable export/import remains version 2. See [Database initialization](deployment.md#database-initialization).
 
 ## External action and type references
 
-After choosing the mode, use the returned context ID in these calls (examples show arguments, not Robin):
+After choosing the mode, pass the selected power_fx value in these calls (examples show arguments, not Robin):
 
 ```json
-{"context_id":"<returned UUID>","query":"join text","module":"Text"}
+{"power_fx":"enabled","query":"join text","module":"Text"}
 ```
 
 Pass those arguments to `search_actions`. Then request the selected record:
 
 ```json
-{"context_id":"<returned UUID>","action_id":"Text.JoinText.Join"}
+{"power_fx":"enabled","action_id":"Text.JoinText.Join"}
 ```
 
-Use `search_type_reference` with `{"context_id":"<returned UUID>","type_name":"String"}` or a type name returned in the action's parameters. Exact identifiers are case-sensitive; preserve generic type notation. Use English technical keywords for catalog searches. The action category is its upstream `module`.
+Use `search_type_reference` with `{"power_fx":"enabled","type_name":"String"}` or a type name returned in the action's parameters. Exact identifiers are case-sensitive; preserve generic type notation. Use English technical keywords for catalog searches. The action category is its upstream `module`.
 
 Search returns five summaries by default (maximum twenty), total match count and a truncation flag. Exact lookup returns one full record or `record: null`; do not combine an exact ID with query/module filters. General edition rules and Power Fx runtime caveats are included once in the development context. It does not include the entire catalog or repeat the initial prompt.
 

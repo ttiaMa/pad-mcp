@@ -45,7 +45,7 @@ test('daily aggregates, exact retention boundary, pagination, opt-out and key de
   } finally { store.close(); }
 });
 
-test('v4 migration preserves keys, contexts and knowledge, and counters persist on reopen', () => {
+test('v4 migration preserves keys, mode selection and knowledge, and counters persist on reopen', () => {
   const dir = mkdtempSync(join(tmpdir(), 'pad-usage-'));
   const path = join(dir, 'db.sqlite');
   let store = new KnowledgeStore(path);
@@ -58,7 +58,7 @@ test('v4 migration preserves keys, contexts and knowledge, and counters persist 
     store.close();
     store = new KnowledgeStore(path);
     assert.equal(new ApiKeys(store.db).authenticate(key.token).id, key.id);
-    assert.deepEqual(store.developmentContext({ context_id: context.context_id }), context);
+    assert.deepEqual(store.developmentContext({ power_fx: context.power_fx }), context);
     assert.deepEqual(store.get('preserved', 'maintainer'), original);
     new UsageStats(store.db).record({ keyId: key.id, tool: 'export_knowledge', mode: 'not_applicable', success: true });
     store.close();
@@ -91,10 +91,10 @@ test('MCP usage is maintainer-only, content-free, excludes protocol traffic and 
   await call(key.token, 'search_patterns', {}); // SDK validation rejects before handler.
   assert.equal((await report()).summary.calls, 0);
   const context = JSON.parse((await call(key.token, 'get_development_context', { power_fx: 'enabled' })).result.content[0].text);
-  await call(key.token, 'search_patterns', { context_id: context.context_id, query: 'PRIVATE_QUERY_SENTINEL' });
-  await call(key.token, 'search_actions', { context_id: context.context_id, action_id: 'missing' });
-  await call(key.token, 'search_type_reference', { context_id: context.context_id, query: 'missing' });
-  await call(key.token, 'get_pattern', { id: 'missing', context_id: context.context_id });
+  await call(key.token, 'search_patterns', { power_fx: context.power_fx, query: 'PRIVATE_QUERY_SENTINEL' });
+  await call(key.token, 'search_actions', { power_fx: context.power_fx, action_id: 'missing' });
+  await call(key.token, 'search_type_reference', { power_fx: context.power_fx, query: 'missing' });
+  await call(key.token, 'get_pattern', { id: 'missing', power_fx: context.power_fx });
   await call(config.maintainerToken, 'get_development_context', { power_fx: 'disabled' });
   assert.deepEqual((await report()).summary, { calls: 5, successes: 4, errors: 1, empty_results: 3, active_keys: 1 });
   const rows = store.db.prepare('SELECT * FROM usage_daily').all();

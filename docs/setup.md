@@ -22,7 +22,7 @@ npm start
 
 Health check: `http://localhost:8080/healthz`. MCP endpoint: `http://localhost:8080/mcp`, with `Authorization: Bearer <token>`. The endpoint is a protocol interface, not a web page.
 
-The endpoint supports MCP `2026-07-28` and retains compatibility with `2025-11-25` clients and earlier SDK-supported revisions. Existing Bearer tokens, API key commands, tool arguments and development contexts remain usable. Unknown or unavailable tools return a JSON-RPC error; application-level tool failures still use `isError`.
+The endpoint supports MCP `2026-07-28` and retains compatibility with `2025-11-25` clients and earlier SDK-supported revisions. Existing Bearer tokens and API key commands remain usable. Development tools now require explicit power_fx instead of context_id; reconnect clients to refresh their schemas. Unknown or unavailable tools return a JSON-RPC error; application-level tool failures still use `isError`.
 
 To give a Developer access, open another terminal in the project directory and create an individual key:
 

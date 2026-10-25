@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const idSchema = z.string().min(1).max(100).regex(/^[a-z0-9][a-z0-9_-]*$/);
-export const contextIdSchema = z.string().uuid().describe('Reuse the immutable development context returned at the start of this chat.');
+export const powerFxSchema = z.enum(['enabled', 'disabled']).describe('Reuse the power_fx mode chosen by the user at the start of this chat.');
 const shortText = z.string().max(2000);
 const notes = z.array(shortText).max(30).default([]);
 
@@ -43,10 +43,9 @@ export const importSchema = z.object({
 }).strict();
 
 export const searchShape = {
-  context_id: contextIdSchema,
   query: z.string().trim().min(1).max(500),
   area: z.string().max(100).optional(),
   kind: z.enum(['snippet', 'convention', 'recipe']).optional(),
-  power_fx: z.enum(['enabled', 'disabled']).optional().describe('Optional consistency check only; must match context_id. The server derives the filter from the context.'),
+  power_fx: powerFxSchema,
   max_results: z.number().int().min(1).max(10).default(3)
 };

@@ -2,7 +2,7 @@
 
 ## Architecture
 
-One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index, persistent development contexts and Developer API key hashes and metadata. No AI provider or remote database is required. Catalog lookups work offline. The server makes no outbound requests for catalogs.
+One Node.js process serves stateless MCP Streamable HTTP with JSON responses. SQLite stores knowledge, the FTS5 index, Developer API key hashes and metadata. No AI provider or remote database is required. Catalog lookups work offline. The server makes no outbound requests for catalogs.
 
 Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8080. The container runs as the unprivileged `node` user. The image uses Node 24; `npm ci` installs the exact dependency versions in the lockfile. Validate base-image updates before deployment.
 
@@ -19,7 +19,7 @@ Coolify's reverse proxy terminates HTTPS and forwards traffic to internal port 8
 | `PORT` | Application port; Compose uses 8080 |
 | `DATABASE_PATH` | Local `./data/knowledge.sqlite`; container `/app/data/knowledge.sqlite` |
 
-The application rejects missing Maintainer credentials or values shorter than 32 characters. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer key cannot mutate knowledge, but can create development contexts.
+The application rejects missing Maintainer credentials or values shorter than 32 characters. Server and transfer script require `MCP_MAINTAINER_TOKEN`; a Developer key cannot mutate knowledge, but can load development guidance.
 
 ### Where environment values come from
 
@@ -52,7 +52,7 @@ To distribute an edited JSON export as the starting collection for a new install
 
 The database is stored on the `knowledge_data` volume at `/app/data/knowledge.sqlite`. Keep that volume attached across redeployments.
 
-Schemas 2–5 upgrade to schema 6. Earlier migrations add development contexts, Developer keys, daily usage counters and last-use timestamps as needed. Schema 6 removes the obsolete key status column and import marker. Previously disabled keys and their counters are deleted so they cannot regain access; active keys, their statistics, snippets, revisions, contexts and the knowledge seed marker are preserved. Back up the volume before deploying an upgrade. Older binaries supporting only schemas 2–5 cannot open schema 6: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys or usage statistics. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
+Schemas 2-6 upgrade to schema 7. Earlier migrations add Developer keys, daily usage counters and last-use timestamps as needed; schema 6 removes obsolete key status/import metadata and previously disabled keys with their counters. Schema 7 deletes the obsolete development-context table, its rows and its immutability trigger. Active keys, statistics, snippets, revisions, the search index and the knowledge seed marker are preserved. No per-chat rows are created. Back up the volume before deploying an upgrade. Older binaries cannot open schema 7: rollback requires restoring the pre-upgrade backup rather than resetting the schema number. Portable export/import remains version 2 and does not include API keys or usage statistics. Published legacy entries with unspecified mode stay available for maintenance/export but are excluded from development; new publication and seed entries require explicit classification.
 
 ### Bundled catalogs
 
@@ -60,7 +60,7 @@ The application and Docker image bundle the Classic and Power Fx action/type JSO
 
 Old catalog cache files are retained but ignored, and `CATALOG_CACHE_PATH` is no longer used. After upgrading, the installed bundle takes precedence over any previously downloaded snapshot. No database migration or deletion is required.
 
-`/healthz` checks the knowledge database; it does not certify catalog validity or PAD execution. To verify a deployment, reconnect an MCP client, choose a mode, search an action and retrieve its exact record and a type. Then restart and repeat using the same context ID. The Dockerfile includes prompts through `COPY src` and all bundled catalogs through `COPY catalogs`.
+`/healthz` checks the knowledge database; it does not certify catalog validity or PAD execution. To verify a deployment, reconnect an MCP client, choose a mode, search an action and retrieve its exact record and a type. Then restart and repeat using the same explicit power_fx value. The Dockerfile includes prompts through `COPY src` and all bundled catalogs through `COPY catalogs`.
 
 ### Request boundary
 

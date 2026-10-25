@@ -35,7 +35,7 @@ One row combines all calls for the same UTC day, Developer key, tool and PAD mod
 | Day | UTC calendar date |
 | Key ID | Links the counters to the name assigned when creating the key |
 | Tool | The registered tool that handled the call |
-| Mode | `classic`, `power_fx` or `not_applicable` when there is no valid context |
+| Mode | `classic`, `power_fx` or `not_applicable` when there is no selected mode |
 | Calls | Total handler executions |
 | Successes | Executions that returned without an error |
 | Errors | Executions that failed inside the tool handler |
@@ -45,7 +45,7 @@ Calls equal successes plus errors. Empty results are a subset of successes. A co
 
 The key registry also stores `last_used_at`, the time of the most recent recorded tool call, including failed calls. This single value is retained until the key is deleted and is available through `npm run keys -- list`.
 
-Statistics do not store prompts, search text, code, arguments, complete responses, context IDs, IP addresses, tokens or error messages. This describes the statistics tables; it does not change existing knowledge storage or infrastructure logs.
+Statistics do not store prompts, search text, code, arguments, complete responses, IP addresses, tokens or error messages. This describes the statistics tables; it does not change existing knowledge storage or infrastructure logs.
 
 Connections, tool listings, invalid credentials, unknown or forbidden tools, and arguments rejected by MCP schema validation before a handler runs are not counted. Active keys are not necessarily distinct people, and a successful call does not prove that a PAD flow executed successfully.
 
