@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/pad-mcp-logo.png" alt="pad-mcp" width="520">
+  <img src="assets/pad-mcp-logo.png" alt="pad-mcp" width="260">
 </p>
 
 **An MCP server for writing Power Automate Desktop flows using shared code snippets and action references.**
@@ -39,8 +39,6 @@ Use a [release tag](https://github.com/ttiaMa/pad-mcp/releases) for a fixed vers
 ## Credits
 
 The action/type catalogs come from **[JoeG592's PAD Robin Action Knowledge Base](https://github.com/JoeG592/pad-robin-action-kb)**. Thank you for making this reference available.
-
-Catalog examples validated by pasting into PAD are useful references; they do not prove that a newly composed flow will run correctly.
 
 ---
 
