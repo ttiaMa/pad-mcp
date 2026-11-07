@@ -2,9 +2,9 @@
   <img src="assets/pad-mcp-logo.png" alt="pad-mcp" width="260">
 </p>
 
-**An MCP server for writing Power Automate Desktop flows using shared code snippets and action references.**
+An MCP server for writing Power Automate Desktop flows using shared code snippets and action references.
 
-Tell your agent what you want to automate. With pad-mcp, it can find the right actions and reuse your team's approved code snippets to generate Power Automate Desktop flows in both Classic and Power Fx.
+Tell your agent what you want to automate. With **pad-mcp**, it can find the right actions and reuse your team's approved code snippets to generate Power Automate Desktop flows in both Classic and Power Fx.
 
 > [!TIP]
 > **Want a quick start?** Try the **public [pad-mcp-lite instance](https://github.com/ttiaMa/pad-mcp-lite#readme)** for action references only, with no server to set up.
@@ -18,9 +18,7 @@ Tell your agent what you want to automate. With pad-mcp, it can find the right a
 
 At the start of the chat, the agent asks whether you use Classic PAD or Power Fx. That choice stays fixed throughout the conversation.
 
-> Use pad-mcp to read orders from Excel and save them as CSV files with 100 orders each.
-
-> Use pad-mcp to recreate this task in Power Automate Desktop with Power Fx enabled. [Copied code]
+> Use pad-mcp with Power Fx enabled to read orders from Excel and save them as CSV files with 100 orders each.
 
 The agent produces **Robin, the scripting language behind PAD flows**. Copy the generated code and paste it into the PAD flow designer to turn it into actions, then review and test the flow.
 
