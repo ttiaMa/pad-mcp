@@ -4,7 +4,10 @@
 
 **An MCP server for writing Power Automate Desktop flows using shared code snippets and action references.**
 
-Describe what you need to automate to build a new flow, or **paste code or process logic from Blue Prism, UiPath or another RPA tool** and ask the agent to rebuild that task in PAD using your team's coding conventions. Supports **Classic PAD and Power Fx**.
+Tell your agent what you want to automate. With pad-mcp, it can find the right actions and reuse your team's approved code snippets to generate Power Automate Desktop flows in both Classic and Power Fx.
+
+> [!TIP]
+> **Want a quick start?** Try the **public [pad-mcp-lite instance](https://github.com/ttiaMa/pad-mcp-lite#readme)** for action references only, with no server to set up.
 
 ## How it works
 
