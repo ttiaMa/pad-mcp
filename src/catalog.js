@@ -110,7 +110,9 @@ export class CatalogIndex {
     const { action_id, query, module, max_results } = actionLookup.parse(args);
     if (action_id) {
       const record = this.#actions.find(item => item.id === action_id)?.record;
-      return structuredClone({ record: record ?? null });
+      if (!record) return { record: null };
+      const { validation, ...detail } = record;
+      return { record: structuredClone(detail) };
     }
     const candidates = module ? this.#actions.filter(item => item.record.module.toLowerCase() === module.toLowerCase()) : this.#actions;
     const matches = rank(candidates, query);

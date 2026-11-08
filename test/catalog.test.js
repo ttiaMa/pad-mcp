@@ -97,11 +97,12 @@ test('action search is compact, bounded, deterministic and supports module-only 
   assert.equal(index.searchActions({ module: 'Text', max_results: 20 }).results.length, 7);
 });
 
-test('exact lookup returns the complete original record, without provenance or fabricated matches', () => {
+test('exact lookup omits validation and preserves all other action fields', () => {
   const input = fixture();
   const index = new CatalogIndex(input);
   const result = index.searchActions({ action_id: 'Text.JoinText.Variant6' });
-  assert.deepEqual(result.record, input.actions.actions[6]);
+  const { validation, ...expected } = input.actions.actions[6];
+  assert.deepEqual(result.record, expected);
   assert.equal('source' in result, false);
   assert.equal(index.searchActions({ action_id: 'text.jointext.variant6' }).record, null);
   result.record.extra.retained = false;

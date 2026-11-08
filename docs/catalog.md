@@ -11,13 +11,13 @@ The parser itself does not register MCP tools, download or cache files, create d
 `new CatalogIndex(input)` accepts the same pair without provenance metadata.
 
 - `searchActions({ query?, module?, max_results? })` searches names, modules, descriptions and parameter names/types. A module-only request browses that module. Module matching is case-insensitive and exact.
-- `searchActions({ action_id })` returns the complete exact record or `record: null`. IDs are case-sensitive. It cannot be combined with query/module filters.
+- `searchActions({ action_id })` returns the exact action record excluding the upstream validation note or `record: null`. IDs are case-sensitive. It cannot be combined with query/module filters.
 - `searchTypes({ query, max_results? })` searches type names, categories and descriptions.
 - `searchTypes({ type_name })` returns the complete exact type record, or `record: null` if absent. Generic type names remain unchanged.
 
 Search defaults to five compact results, with a maximum of twenty, a total match count and truncation flag. Ranking prefers an exact identifier, then the number of matching normalized keywords, with stable identifier ordering for ties. CamelCase names are split into keywords. Search uses any matching term; it does not translate Italian or infer semantic matches. Callers should use upstream technical terms and module filters as needed.
 
-Only exact detail requests include templates, golden examples or type examples. Returned details are detached copies so callers cannot mutate the index. Upstream paste-validation statements are preserved as source claims, not execution guarantees for generated flows.
+Only exact detail requests include templates, golden examples or type examples. Returned details are detached copies so callers cannot mutate the index. The original JSON files retain the upstream validation notes. Action lookups omit these notes. When using a UI example, record the target element in your own application and use its name in the flow.
 
 Action records may include `error_handling: { on_error, errors }`. The parser validates the boolean support flag and array of nonempty error names when present, while accepting older catalogs without this field. Missing metadata means unknown support; an empty `errors` array does not imply `on_error: false`. Exact lookups preserve this metadata, while search summaries remain unchanged. Shared guidance explains named handlers and preserves existing subflow-level error handling rather than adding local handlers by default.
 
@@ -41,7 +41,7 @@ MCP knowledge tools require an explicit power_fx mode for each development looku
 
 `search_actions` and `search_type_reference` are available to both roles and require a valid context. The server derives the edition from the stored mode. Lookups use only the bundled catalogs; unavailable or invalid local data returns an MCP error.
 
-The context tool loads shared guidance and only the selected edition's prompt, without downloading a catalog. Read [common](../src/prompts/common.md), [Classic](../src/prompts/classic.md) and [Power Fx](../src/prompts/power-fx.md). The context includes the original type rules and Power Fx rules/exception metadata where present. Action and type detail responses contain only the complete record, with no repeated rules or rule references. Search summaries remain small.
+The context tool loads shared guidance and only the selected edition's prompt, without downloading a catalog. Read [common](../src/prompts/common.md), [Classic](../src/prompts/classic.md) and [Power Fx](../src/prompts/power-fx.md). The context includes the original type rules and Power Fx rules/exception metadata where present. Detail responses omit repeated rules and rule references. Search summaries remain small.
 
 ## Verification
 

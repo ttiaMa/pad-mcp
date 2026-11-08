@@ -85,7 +85,7 @@ function buildMcp(store, role, catalogCache, usage, keyId) {
     catch { throw new KnowledgeError('Catalog unavailable: no valid catalog pair could be loaded. Approved snippet tools remain available; retry later.'); }
     return index[method](parsed.data);
   }
-  tool('search_actions', 'Search the selected PAD edition by English technical keywords or module (category). Returns up to five compact matches by default. Then pass action_id alone for the complete action, parameters, examples, sibling selectors and constraints. Never invent selectors; use the same power_fx value throughout this chat.', {
+  tool('search_actions', 'Search the selected PAD edition by English technical keywords or module (category). Returns up to five compact matches by default. Then pass action_id alone for the action details, parameters, examples, sibling selectors and constraints. Never invent selectors; use the same power_fx value throughout this chat.', {
     ...catalogShape, action_id: z.string().trim().min(1).max(300).optional(), module: z.string().trim().min(1).max(100).optional()
   }, true, args => catalogLookup(args, actionLookup, 'searchActions'));
   tool('search_type_reference', 'Search the selected PAD edition by type keywords, or pass an exact type_name (including generic notation) for full syntax, examples and formatting. General rules are in the development context. Reuse power_fx; results are reference data, not execution guarantees.', {
