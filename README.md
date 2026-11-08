@@ -7,14 +7,14 @@ An MCP server for writing Power Automate Desktop flows using shared code snippet
 Tell your agent what you want to automate. With **pad-mcp**, it can find the right actions and reuse your team's approved code snippets to generate Power Automate Desktop flows in both Classic and Power Fx.
 
 > [!TIP]
-> **Want a quick start?** Try the **public [pad-mcp-lite instance](https://github.com/ttiaMa/pad-mcp-lite#readme)** for action references only, with no server to set up.
+> **Want a quick start?** Try the **public [pad-mcp-lite instance](https://github.com/ttiaMa/pad-mcp-lite#readme)** with action references only, but no server to set up.
 
 ## How it works
 
 | Your team's knowledge | The action reference |
 | --- | --- |
 | Reusable PAD code snippets, step-by-step solutions and conventions you review and publish. | A searchable catalog of actions, parameters, examples and data types. |
-| Stored in the SQLite database included with pad-mcp. | JSON catalogs from [PAD Robin Action Knowledge Base](https://github.com/JoeG592/pad-robin-action-kb), bundled with the application. |
+| Stored in the SQLite database included with pad-mcp. The DB starts empty. | JSON catalogs from [PAD Robin Action Knowledge Base](https://github.com/JoeG592/pad-robin-action-kb), bundled with the application. |
 
 At the start of the chat, the agent asks whether you use Classic PAD or Power Fx. That choice stays fixed throughout the conversation.
 
