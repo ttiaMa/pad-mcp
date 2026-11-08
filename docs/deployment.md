@@ -78,7 +78,7 @@ The local override publishes port 8080 on loopback only. For a containerized rev
 
 ## Update an existing instance
 
-A GitHub release identifies a fixed Git tag, such as `v1.0.0`. It includes source archives containing the Dockerfile, Compose files, catalogs and lockfile. A Git checkout at that tag and an extracted release archive use the same build and runtime configuration. Release notes describe changes, migration requirements and relevant commits. Keep published tags fixed.
+A GitHub release identifies a fixed Git tag, such as `v1.0.1`. It includes source archives containing the Dockerfile, Compose files, catalogs and lockfile. A Git checkout at that tag and an extracted release archive use the same build and runtime configuration. Release notes describe changes, migration requirements and relevant commits. Keep published tags fixed.
 
 The `latest` branch follows the most recent stable GitHub release. It advances only when that release is published; normal commits to `main` do not move it. To use it in a clean checkout, run `git fetch origin`, `git switch latest`, and `git pull --ff-only origin latest`, then rebuild as below. Use a version tag when you want to stay on one exact release.
 
@@ -88,7 +88,7 @@ For a Git checkout, fetch tags and select the published release you want. For th
 
 ```sh
 git fetch origin --tags
-git checkout --detach v1.0.0
+git checkout --detach v1.0.1
 ```
 
 For an archive installation, replace application sources with those from the target release while keeping local configuration and data. Rebuild using the same Compose files and project name as before. For the host-proxy/local configuration in the setup guide:
@@ -106,7 +106,7 @@ To follow development instead, use `git switch main` and `git pull --ff-only ori
 
 Keep the existing application, `/compose.yaml`, environment, domain and `/app/data` volume. Back up the volume before redeploying. In **Source**, set **Branch** to `latest` and **Commit SHA** to `HEAD`. Select manual deployments under **Advanced > Deployment > Auto deploy** (older versions expose an Auto Deploy toggle), then save and redeploy. Each manual redeployment takes the latest stable release; commits on `main` are excluded. Confirm the commit in deployment logs, check `/healthz` and reconnect the MCP client.
 
-To stay on one exact release instead, keep branch `main` and put the full output of `git rev-list -n 1 v1.0.0` in **Commit SHA** after fetching tags. Coolify's resource-group Tags are unrelated to Git release tags. Labels vary by version; see [source settings](https://github.com/coollabsio/coolify/blob/main/resources/views/livewire/project/application/source.blade.php) and [automatic deployments](https://coolify.io/docs/applications/deployments/automatic-deployments). Configure separate environment values and storage for any Preview instance.
+To stay on one exact release instead, keep branch `main` and put the full output of `git rev-list -n 1 v1.0.1` in **Commit SHA** after fetching tags. Coolify's resource-group Tags are unrelated to Git release tags. Labels vary by version; see [source settings](https://github.com/coollabsio/coolify/blob/main/resources/views/livewire/project/application/source.blade.php) and [automatic deployments](https://coolify.io/docs/applications/deployments/automatic-deployments). Configure separate environment values and storage for any Preview instance.
 
 ### Maintaining the stable release branch
 

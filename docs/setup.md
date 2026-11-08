@@ -2,10 +2,10 @@
 
 ## Choose a version
 
-For a stable installation, download the source archive from [release v1.0.0](https://github.com/ttiaMa/pad-mcp/releases/tag/v1.0.0) and extract it, or use Git:
+For a stable installation, download the source archive from [release v1.0.1](https://github.com/ttiaMa/pad-mcp/releases/tag/v1.0.1) and extract it, or use Git:
 
 ```sh
-git clone --branch v1.0.0 https://github.com/ttiaMa/pad-mcp.git pad-mcp
+git clone --branch v1.0.1 https://github.com/ttiaMa/pad-mcp.git pad-mcp
 cd pad-mcp
 ```
 

@@ -1,7 +1,7 @@
 {
   "name": "PAD Robin Data Type Reference (Power Fx)",
   "version": "1.0.0",
-  "date": "2026-10-13",
+  "date": "2026-11-07",
   "description": "Power Fx edition of the Type Reference 3.1.1: how to write each parameter type in a Power Fx-enabled desktop flow. Text values are $fx'...'; everything else is written as in classic flows unless noted.",
   "rules": [
     "Text values use $fx'value'. Inside, \\' is an apostrophe and \\\\ one backslash; a bare or doubled apostrophe rejects the whole paste.",

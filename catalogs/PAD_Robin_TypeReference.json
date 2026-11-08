@@ -1,7 +1,7 @@
 {
   "name": "PAD Robin Data Type Reference",
   "version": "3.1.1",
-  "date": "2026-10-09",
+  "date": "2026-11-07",
   "description": "Deterministic fill rules for every PAD Robin parameter type. Each type has a validated example showing the exact syntax PAD accepts. v3.0 adds the three types that Action KB v3.0 (1185 selector variants) uses and v2.0 lacked. v3.1 adds PowerPointInstanceHandle and Int64 for Action KB v3.1 (PAD 2.72).",
   "rules": [
     "String values use $'''value''' format (dollar-triple-quotes)",
